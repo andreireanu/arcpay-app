@@ -3,4 +3,9 @@ export const config = {
     url: import.meta.env.VITE_SUPABASE_URL as string,
     anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
   },
+  solana: {
+    rpcUrl: import.meta.env.VITE_SOLANA_RPC_URL as string,
+    network: import.meta.env.VITE_SOLANA_NETWORK as string,
+    programId: import.meta.env.VITE_PROGRAM_ID as string,
+  },
 }
