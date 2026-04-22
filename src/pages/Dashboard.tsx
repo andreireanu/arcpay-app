@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { useAuth } from '../hooks/useAuth'
+import { useRegister } from '../hooks/useRegister'
 import { getProducts } from '../supabase/products'
 import type { Product } from '../types/product'
 
 export default function Dashboard() {
   const { session, signOutUser } = useAuth()
-  const { publicKey, sendTransaction, connected } = useWallet()
+  const { register, registering, connected } = useRegister()
   const navigate = useNavigate()
   const [products, setProducts] = useState<Product[]>([])
-  const [registering, setRegistering] = useState<string | null>(null)
 
   useEffect(() => {
     getProducts().then(setProducts).catch(console.error)
@@ -22,20 +21,13 @@ export default function Dashboard() {
     navigate('/login')
   }
 
-  async function handleRegister(productId: string) {
-    if (!publicKey || !connected) return
-    setRegistering(productId)
-    try {
-      // TODO: build and send on-chain register instruction
-      console.log('register', publicKey.toBase58())
-    } finally {
-      setRegistering(null)
-    }
+  async function handleRegister() {
+    const signature = await register()
+    if (signature) console.log('registered:', signature)
   }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-50 m-0">
@@ -56,9 +48,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Content */}
       <main className="px-6 py-8 max-w-5xl mx-auto">
-        {/* Products section */}
         <section className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-950 p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-5">
             Products
@@ -89,11 +79,11 @@ export default function Dashboard() {
                   )}
                 </div>
                 <button
-                  onClick={() => handleRegister(product.id)}
-                  disabled={!connected || registering === product.id}
+                  onClick={handleRegister}
+                  disabled={!connected || registering}
                   className="w-full py-2 px-4 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
                 >
-                  {registering === product.id ? 'Registering…' : 'Register'}
+                  {registering ? 'Registering…' : 'Register'}
                 </button>
               </div>
             ))}
