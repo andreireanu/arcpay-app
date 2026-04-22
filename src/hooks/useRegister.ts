@@ -4,7 +4,7 @@ import { connection } from '../solana/connection'
 import { register as solanaRegister } from '../solana/instructions/register'
 
 export function useRegister() {
-  const { connected, sendTransaction } = useWallet()
+  const { connected } = useWallet()
   const anchorWallet = useAnchorWallet()
   const [registering, setRegistering] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -14,7 +14,7 @@ export function useRegister() {
     setRegistering(true)
     setError(null)
     try {
-      const signature = await solanaRegister(connection, anchorWallet, sendTransaction)
+      const signature = await solanaRegister(connection, anchorWallet)
       return signature
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')

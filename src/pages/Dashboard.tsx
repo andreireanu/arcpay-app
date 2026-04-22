@@ -1,29 +1,28 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
-import { useAuth } from '../hooks/useAuth'
-import { useRegister } from '../hooks/useRegister'
-import { getProducts } from '../supabase/products'
-import type { Product } from '../types/product'
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { useAuth } from "../hooks/useAuth";
+import { useRegister } from "../hooks/useRegister";
+import { getProducts } from "../supabase/products";
+import type { Product } from "../types/product";
 
 export default function Dashboard() {
-  const { session, signOutUser } = useAuth()
-  const { register, registering, connected } = useRegister()
-  const navigate = useNavigate()
-  const [products, setProducts] = useState<Product[]>([])
+  const { session, signOutUser } = useAuth();
+  const { register, registering, connected } = useRegister();
+  const navigate = useNavigate();
+  const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
-    getProducts().then(setProducts).catch(console.error)
-  }, [])
+    getProducts().then(setProducts).catch(console.error);
+  }, []);
 
   async function handleSignOut() {
-    await signOutUser()
-    navigate('/login')
+    await signOutUser();
+    navigate("/login");
   }
 
   async function handleRegister() {
-    const signature = await register()
-    if (signature) console.log('registered:', signature)
+    await register();
   }
 
   return (
@@ -83,7 +82,7 @@ export default function Dashboard() {
                   disabled={!connected || registering}
                   className="w-full py-2 px-4 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
                 >
-                  {registering ? 'Registering…' : 'Register'}
+                  {registering ? "Registering…" : "Register"}
                 </button>
               </div>
             ))}
@@ -91,5 +90,5 @@ export default function Dashboard() {
         </section>
       </main>
     </div>
-  )
+  );
 }
