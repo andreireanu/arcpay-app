@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js'
-import { supabase } from './client'
+import { supabase } from '../client'
 
 export async function getSession(): Promise<Session | null> {
   const { data, error } = await supabase.auth.getSession()
@@ -35,7 +35,6 @@ export async function signUp(
     password,
   })
   if (error) return { success: false, emailConfirmationRequired: false, error: error.message }
-  // If no session, Supabase requires email confirmation before logging in
   return { success: true, emailConfirmationRequired: !data.session }
 }
 

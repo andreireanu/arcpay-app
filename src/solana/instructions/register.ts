@@ -8,7 +8,7 @@ import type { Connection } from '@solana/web3.js'
 import type { AnchorWallet } from '@solana/wallet-adapter-react'
 import { BN } from '@coral-xyz/anchor'
 import { getProgram, PROGRAM_ID } from '../program'
-import { getRegistrationAuth } from '../../supabase/authorize'
+import { getRegistrationAuth } from '../../supabase/sol/authorize'
 
 export async function register(
   connection: Connection,

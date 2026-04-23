@@ -1,4 +1,4 @@
-import { supabase } from './client'
+import { supabase } from '../client'
 
 export interface RegistrationAuth {
   signature: Uint8Array    // 64 bytes — ed25519 signature from backend

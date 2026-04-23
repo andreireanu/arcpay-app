@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useAuth } from "../hooks/useAuth";
 import { useRegister } from "../hooks/useRegister";
-import { getProducts } from "../supabase/products";
+import { getProducts } from "../supabase/products/products";
 import type { Product } from "../types/product";
 
 export default function Dashboard() {
   const { session, signOutUser } = useAuth();
-  const { register, registering, connected } = useRegister();
+  const { register, registering, registered, connected } = useRegister();
   const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -77,13 +77,19 @@ export default function Dashboard() {
                     </p>
                   )}
                 </div>
-                <button
-                  onClick={handleRegister}
-                  disabled={!connected || registering}
-                  className="w-full py-2 px-4 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-                >
-                  {registering ? "Registering…" : "Register"}
-                </button>
+                {registered ? (
+                  <div className="w-full py-2 px-4 rounded-lg bg-green-600 text-white text-sm font-medium text-center">
+                    Registered
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleRegister}
+                    disabled={!connected || registering}
+                    className="w-full py-2 px-4 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+                  >
+                    {registering ? "Registering…" : "Register"}
+                  </button>
+                )}
               </div>
             ))}
           </div>

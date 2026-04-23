@@ -1,7 +1,7 @@
 import { createContext, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { getSession, onAuthStateChange, signIn, signOut, signUp } from '../supabase/auth'
+import { getSession, onAuthStateChange, signIn, signOut, signUp } from '../supabase/auth/auth'
 
 interface AuthContextType {
   session: Session | null | undefined  // undefined = still loading
