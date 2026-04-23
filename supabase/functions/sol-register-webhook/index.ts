@@ -40,16 +40,22 @@ Deno.serve(async (req) => {
         (c) => c.charCodeAt(0),
       );
 
-      // WalletRegistered: 8 discriminator + 32 user_profile + 32 wallet + 8 timestamp = 80 bytes
-      if (bytes.length < 80 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
+      // WalletRegistered: 8 discriminator + 32 user_profile + 32 wallet + 16 uuid + 8 timestamp = 96 bytes
+      if (bytes.length < 96 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
 
       const userProfile = new PublicKey(bytes.slice(8, 40)).toBase58();
       const wallet = new PublicKey(bytes.slice(40, 72)).toBase58();
 
+      // uuid: 16 bytes → "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      const uuidHex = Array.from(bytes.slice(72, 88))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      const userId = `${uuidHex.slice(0, 8)}-${uuidHex.slice(8, 12)}-${uuidHex.slice(12, 16)}-${uuidHex.slice(16, 20)}-${uuidHex.slice(20, 32)}`;
+
       const { error } = await supabase
         .from("qr_generator_sellers")
         .upsert(
-          { id: userProfile, wallet_address: wallet },
+          { id: userProfile, wallet_address: wallet, user_id: userId },
           { onConflict: "id" },
         );
 

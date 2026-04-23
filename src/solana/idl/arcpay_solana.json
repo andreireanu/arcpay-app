@@ -1,5 +1,5 @@
 {
-  "address": "3Aqwm7Rz2fbcuE4sVREUQWB7fDuXbzz1eERcQhAvF1qH",
+  "address": "4TmDTsMfaftRVdDRuMvpBkJgoTUgxrqC9vE2vNGKqLBp",
   "metadata": {
     "name": "arcpay_solana",
     "version": "0.1.0",
@@ -193,7 +193,12 @@
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "backend_pubkey",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "pause_listing",
@@ -262,11 +267,47 @@
           }
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "expiry",
+          "type": "i64"
+        },
+        {
+          "name": "uuid",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "remove_registration",
@@ -555,6 +596,21 @@
       "code": 6004,
       "name": "ListingNotActive",
       "msg": "Listing is not active"
+    },
+    {
+      "code": 6005,
+      "name": "AuthorizationExpired",
+      "msg": "Authorization signature has expired"
+    },
+    {
+      "code": 6006,
+      "name": "MissingEd25519Instruction",
+      "msg": "Ed25519 instruction missing or not at index 0"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidAuthorizationSignature",
+      "msg": "Invalid backend authorization signature"
     }
   ],
   "types": [
@@ -565,6 +621,10 @@
         "fields": [
           {
             "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "backend_pubkey",
             "type": "pubkey"
           },
           {
@@ -746,6 +806,15 @@
           {
             "name": "wallet",
             "type": "pubkey"
+          },
+          {
+            "name": "uuid",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
           },
           {
             "name": "timestamp",
