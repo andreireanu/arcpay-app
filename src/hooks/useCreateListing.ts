@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAnchorWallet, useWallet } from '@solana/wallet-adapter-react'
 import { connection } from '../solana/connection'
+import { createListing as createListingTx } from '../solana/instructions/createListing'
 import { getSession } from '../supabase/auth/auth'
 import { insertOffer } from '../supabase/offers/offers'
 import { waitForListing } from '../supabase/listings/realtime'
@@ -39,7 +40,7 @@ export function useCreateListing() {
       const { promise, cancel: cancelListener } = waitForListing(offer.id)
       cancel = cancelListener
 
-      // TODO: send create_listing on-chain tx here
+      await createListingTx(connection, anchorWallet, priceLamports, offer.id)
 
       const listing = await promise
       return { offer, listing }
