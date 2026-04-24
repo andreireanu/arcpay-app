@@ -3,18 +3,30 @@ import { useNavigate } from "react-router-dom";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useAuth } from "../hooks/useAuth";
 import { useRegister } from "../hooks/useRegister";
+import { useCreateListing } from "../hooks/useCreateListing";
 import { getProducts } from "../supabase/products/products";
+import { getOffersByUser } from "../supabase/offers/offers";
 import type { Product } from "../types/product";
+import type { Offer } from "../types/offer";
+import AddOfferModal from "../components/AddOfferModal";
 
 export default function Dashboard() {
   const { session, signOutUser } = useAuth();
   const { register, registering, registered, connected } = useRegister();
+  const { createListing, creating } = useCreateListing();
   const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [offerModalOpen, setOfferModalOpen] = useState(false);
 
   useEffect(() => {
     getProducts().then(setProducts).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (!registered || !session) return;
+    getOffersByUser(session.user.id).then(setOffers).catch(console.error);
+  }, [registered, session]);
 
   async function handleSignOut() {
     await signOutUser();
@@ -23,6 +35,14 @@ export default function Dashboard() {
 
   async function handleRegister() {
     await register();
+  }
+
+  async function handleCreateOffer(name: string, description: string, priceLamports: number) {
+    const result = await createListing(name, description, priceLamports);
+    if (result) {
+      setOffers((prev) => [...prev, { ...result.offer, status: 'active' }]);
+      setOfferModalOpen(false);
+    }
   }
 
   return (
@@ -94,7 +114,64 @@ export default function Dashboard() {
             ))}
           </div>
         </section>
+
+        {registered && (
+          <section className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-950 p-6 mt-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
+                QR Offers
+              </h2>
+              <button
+                onClick={() => setOfferModalOpen(true)}
+                className="px-4 py-2 text-sm rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors"
+              >
+                Create
+              </button>
+            </div>
+            {offers.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No offers yet. Create one to generate a QR code buyers can scan to pay.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {offers.map((offer) => (
+                  <div
+                    key={offer.id}
+                    className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-2"
+                  >
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-50 text-base">
+                      {offer.name}
+                    </h3>
+                    {offer.description && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {offer.description}
+                      </p>
+                    )}
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {(offer.price_lamports / 1_000_000_000).toFixed(4)} SOL
+                    </p>
+                    <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${
+                      offer.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                      offer.status === 'paused' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                      offer.status === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                      'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                    }`}>
+                      {offer.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </main>
+
+      <AddOfferModal
+        open={offerModalOpen}
+        onClose={() => setOfferModalOpen(false)}
+        onSubmit={handleCreateOffer}
+        creating={creating}
+      />
     </div>
   );
 }

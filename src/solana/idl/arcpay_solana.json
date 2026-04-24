@@ -148,6 +148,15 @@
         {
           "name": "price_lamports",
           "type": "u64"
+        },
+        {
+          "name": "uuid",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
         }
       ]
     },
@@ -726,6 +735,15 @@
           {
             "name": "price_lamports",
             "type": "u64"
+          },
+          {
+            "name": "uuid",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
           },
           {
             "name": "timestamp",
