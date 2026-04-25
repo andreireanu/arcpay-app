@@ -2,32 +2,37 @@ import { useState, useEffect } from 'react'
 import { useWallet, useAnchorWallet } from '@solana/wallet-adapter-react'
 import { connection } from '../solana/connection'
 import { register as solanaRegister } from '../solana/instructions/register'
-import { getSession } from '../supabase/auth/auth'
-import { isUserRegistered } from '../supabase/sellers/sellers'
+import { getRegisteredWallet } from '../supabase/sellers/sellers'
 import { waitForRegistration } from '../supabase/sellers/realtime'
+import { useAuth } from './useAuth'
 
 export function useRegister() {
+  const { session } = useAuth()
   const { connected } = useWallet()
   const anchorWallet = useAnchorWallet()
   const [registering, setRegistering] = useState(false)
   const [registered, setRegistered] = useState(false)
+  const [registeredWallet, setRegisteredWallet] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Check DB on mount — user may have registered in a previous session
+  // Intentionally depends on user ID, not the full session object — avoids re-running on token refresh
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    getSession().then((session) => {
-      if (!session) return
-      isUserRegistered(session.user.id)
-        .then((result) => { if (result) setRegistered(true) })
-        .catch(console.error)
+    setRegistered(false)
+    setRegisteredWallet(null)
+    if (!session) return
+    getRegisteredWallet(session.user.id).then((wallet) => {
+      if (wallet) {
+        setRegistered(true)
+        setRegisteredWallet(wallet)
+      }
     }).catch(console.error)
-  }, [])
+  }, [session?.user.id])
+
+  const walletMatch = connected && anchorWallet?.publicKey.toBase58() === registeredWallet
 
   async function register(): Promise<string | null> {
-    if (!anchorWallet || !connected) return null
-
-    const session = await getSession()
-    if (!session) return null
+    if (!anchorWallet || !connected || !session) return null
 
     // Start listener before tx so we don't miss the webhook write
     const { promise: dbPromise, cancel: cancelListener } = waitForRegistration(session.user.id)
@@ -48,5 +53,5 @@ export function useRegister() {
     }
   }
 
-  return { register, registering, registered, error, connected }
+  return { register, registering, registered, registeredWallet, walletMatch, error, connected }
 }

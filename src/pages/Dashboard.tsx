@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useAuth } from "../hooks/useAuth";
 import { useRegister } from "../hooks/useRegister";
@@ -10,11 +9,21 @@ import type { Product } from "../types/product";
 import type { OfferDetail } from "../types/offerDetail";
 import AddOfferModal from "../components/AddOfferModal";
 
+function shortWallet(address: string) {
+  return `${address.slice(0, 4)}…${address.slice(-4)}`;
+}
+
 export default function Dashboard() {
   const { session, signOutUser } = useAuth();
-  const { register, registering, registered, connected } = useRegister();
+  const {
+    register,
+    registering,
+    registered,
+    registeredWallet,
+    walletMatch,
+    connected,
+  } = useRegister();
   const { createListing, creating } = useCreateListing();
-  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [offers, setOffers] = useState<OfferDetail[]>([]);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
@@ -24,23 +33,26 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (!registered || !session) return;
+    if (!registered || !walletMatch || !session) return;
     getOffersByUser(session.user.id).then(setOffers).catch(console.error);
-  }, [registered, session]);
+  }, [registered, walletMatch, session]);
 
   async function handleSignOut() {
     await signOutUser();
-    navigate("/login");
+    window.location.href = "/login";
   }
 
-  async function handleRegister() {
-    await register();
-  }
-
-  async function handleCreateOffer(name: string, description: string, priceLamports: number) {
+  async function handleCreateOffer(
+    name: string,
+    description: string,
+    priceLamports: number,
+  ) {
     const result = await createListing(name, description, priceLamports);
     if (result) {
-      setOffers((prev) => [...prev, { ...result.offer, status: 'active', qr_listings: result.listing }]);
+      setOffers((prev) => [
+        ...prev,
+        { ...result.offer, status: "active", qr_listings: result.listing },
+      ]);
       setOfferModalOpen(false);
     }
   }
@@ -49,7 +61,7 @@ export default function Dashboard() {
     const response = await fetch(qrUrl);
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `${offerName}-qr.svg`;
     a.click();
@@ -78,8 +90,30 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="px-6 py-8 max-w-5xl mx-auto">
-        <section className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-950 p-6">
+      <main className="px-6 py-8 max-w-5xl mx-auto flex flex-col gap-6">
+        {/* Wallet banners — only relevant when the user has already registered */}
+        {registered && !connected && (
+          <div className="rounded-xl border border-yellow-200 bg-yellow-50 dark:border-yellow-800/40 dark:bg-yellow-900/20 px-5 py-4 text-sm text-yellow-800 dark:text-yellow-300">
+            Connect wallet{" "}
+            <span className="font-mono font-medium">{registeredWallet!}</span>{" "}
+            to access your offers.
+          </div>
+        )}
+        {registered && connected && !walletMatch && (
+          <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/20 px-5 py-4 text-sm text-red-800 dark:text-red-300">
+            Wrong wallet connected. Please connect wallet{" "}
+            <span className="font-mono font-medium">{registeredWallet!}</span>{" "}
+            to access your offers.
+          </div>
+        )}
+
+        {/* Products — only shown when wallet is connected */}
+        {!connected && !registered && (
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-5 py-4 text-sm text-gray-500 dark:text-gray-400">
+            Connect your Phantom wallet to get started.
+          </div>
+        )}
+        {connected && (!registered || walletMatch) && <section className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-950 p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-5">
             Products
           </h2>
@@ -108,26 +142,31 @@ export default function Dashboard() {
                     </p>
                   )}
                 </div>
-                {registered ? (
+                {registered && walletMatch ? (
                   <div className="w-full py-2 px-4 rounded-lg bg-green-600 text-white text-sm font-medium text-center">
                     Registered
                   </div>
                 ) : (
                   <button
-                    onClick={handleRegister}
+                    onClick={() => register()}
                     disabled={!connected || registering}
                     className="w-full py-2 px-4 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
                   >
-                    {registering ? "Registering…" : "Register"}
+                    {registering
+                      ? "Registering…"
+                      : connected
+                        ? "Register"
+                        : "Connect wallet to register"}
                   </button>
                 )}
               </div>
             ))}
           </div>
-        </section>
+        </section>}
 
-        {registered && (
-          <section className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-950 p-6 mt-6">
+        {/* QR Offers — only when registered AND correct wallet is connected */}
+        {registered && walletMatch && (
+          <section className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-950 p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
                 QR Offers
@@ -141,7 +180,8 @@ export default function Dashboard() {
             </div>
             {offers.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                No offers yet. Create one to generate a QR code buyers can scan to pay.
+                No offers yet. Create one to generate a QR code buyers can scan
+                to pay.
               </p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -161,12 +201,17 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                       {(offer.price_lamports / 1_000_000_000).toFixed(4)} SOL
                     </p>
-                    <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${
-                      offer.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                      offer.status === 'paused' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                      offer.status === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                      'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                    }`}>
+                    <span
+                      className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${
+                        offer.status === "active"
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : offer.status === "paused"
+                            ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                            : offer.status === "cancelled"
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                              : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                      }`}
+                    >
                       {offer.status}
                     </span>
                     <div className="flex gap-2 mt-1">
@@ -174,14 +219,19 @@ export default function Dashboard() {
                         href={`/pay/${offer.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 text-center py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        className="flex-1 text-center py-1.5 text-xs rounded-lg border border-purple-600 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
                       >
                         View page
                       </a>
                       {offer.qr_listings?.qr_url && (
                         <button
-                          onClick={() => handleDownloadQr(offer.qr_listings!.qr_url!, offer.name)}
-                          className="flex-1 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                          onClick={() =>
+                            handleDownloadQr(
+                              offer.qr_listings!.qr_url!,
+                              offer.name,
+                            )
+                          }
+                          className="flex-1 py-1.5 text-xs rounded-lg border border-purple-600 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
                         >
                           Download QR
                         </button>

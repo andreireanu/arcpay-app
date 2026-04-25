@@ -10,12 +10,12 @@ export async function isWalletRegistered(walletAddress: string): Promise<boolean
   return data !== null
 }
 
-export async function isUserRegistered(userId: string): Promise<boolean> {
+export async function getRegisteredWallet(userId: string): Promise<string | null> {
   const { data, error } = await supabase
     .from('qr_generator_sellers')
-    .select('id')
+    .select('wallet_address')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) throw error
-  return data !== null
+  return data?.wallet_address ?? null
 }
