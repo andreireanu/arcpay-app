@@ -1,5 +1,6 @@
 import { supabase } from '../client'
 import type { Offer } from '../../types/offer'
+import type { OfferDetail } from '../../types/offerDetail'
 
 export async function insertOffer(
   userId: string,
@@ -23,11 +24,21 @@ export async function insertOffer(
   return offer
 }
 
-export async function getOffersByUser(userId: string): Promise<Offer[]> {
+export async function getOffer(offerId: string): Promise<OfferDetail | null> {
+  const { data, error } = await supabase
+    .from('qr_offers_data')
+    .select('*, qr_listings(*)')
+    .eq('id', offerId)
+    .maybeSingle()
+  if (error) throw error
+  return data as OfferDetail | null
+}
+
+export async function getOffersByUser(userId: string): Promise<OfferDetail[]> {
   const { data, error } = await supabase
     .from('qr_offers_sellers')
-    .select('qr_offers_data(*)')
+    .select('qr_offers_data(*, qr_listings(*))')
     .eq('user_id', userId)
   if (error) throw error
-  return data.map((row) => row.qr_offers_data as unknown as Offer)
+  return data.map((row) => row.qr_offers_data as unknown as OfferDetail)
 }

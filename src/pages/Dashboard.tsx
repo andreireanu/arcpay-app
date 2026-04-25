@@ -7,7 +7,7 @@ import { useCreateListing } from "../hooks/useCreateListing";
 import { getProducts } from "../supabase/products/products";
 import { getOffersByUser } from "../supabase/offers/offers";
 import type { Product } from "../types/product";
-import type { Offer } from "../types/offer";
+import type { OfferDetail } from "../types/offerDetail";
 import AddOfferModal from "../components/AddOfferModal";
 
 export default function Dashboard() {
@@ -16,7 +16,7 @@ export default function Dashboard() {
   const { createListing, creating } = useCreateListing();
   const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
+  const [offers, setOffers] = useState<OfferDetail[]>([]);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
 
   useEffect(() => {
@@ -40,9 +40,20 @@ export default function Dashboard() {
   async function handleCreateOffer(name: string, description: string, priceLamports: number) {
     const result = await createListing(name, description, priceLamports);
     if (result) {
-      setOffers((prev) => [...prev, { ...result.offer, status: 'active' }]);
+      setOffers((prev) => [...prev, { ...result.offer, status: 'active', qr_listings: result.listing }]);
       setOfferModalOpen(false);
     }
+  }
+
+  async function handleDownloadQr(qrUrl: string, offerName: string) {
+    const response = await fetch(qrUrl);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${offerName}-qr.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -158,6 +169,24 @@ export default function Dashboard() {
                     }`}>
                       {offer.status}
                     </span>
+                    <div className="flex gap-2 mt-1">
+                      <a
+                        href={`/pay/${offer.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 text-center py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        View page
+                      </a>
+                      {offer.qr_listings?.qr_url && (
+                        <button
+                          onClick={() => handleDownloadQr(offer.qr_listings!.qr_url!, offer.name)}
+                          className="flex-1 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          Download QR
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
