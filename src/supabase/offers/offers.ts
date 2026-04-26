@@ -34,6 +34,29 @@ export async function getOffer(offerId: string): Promise<OfferDetail | null> {
   return data as OfferDetail | null
 }
 
+export function watchOfferStatuses(
+  offerIds: string[],
+  onUpdate: (offerId: string, status: string) => void,
+): () => void {
+  if (offerIds.length === 0) return () => {};
+
+  const channels = offerIds.map((id) =>
+    supabase
+      .channel(`offer-status-${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'qr_offers_data', filter: `id=eq.${id}` },
+        (payload) => {
+          const status = (payload.new as { status?: string }).status;
+          if (status) onUpdate(id, status);
+        },
+      )
+      .subscribe(),
+  );
+
+  return () => channels.forEach((c) => c.unsubscribe());
+}
+
 export function watchOfferStatus(
   offerId: string,
   onStatus: (status: string) => void,

@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { useAnchorWallet, useConnection } from "@solana/wallet-adapter-react";
 import { useAuth } from "../hooks/useAuth";
 import { useRegister } from "../hooks/useRegister";
 import { useCreateListing } from "../hooks/useCreateListing";
 import { getProducts } from "../supabase/products/products";
-import { getOffersByUser } from "../supabase/offers/offers";
+import { getOffersByUser, watchOfferStatuses } from "../supabase/offers/offers";
+import { pauseListing } from "../solana/instructions/pauseListing";
+import { resumeListing } from "../solana/instructions/resumeListing";
 import type { Product } from "../types/product";
 import type { OfferDetail } from "../types/offerDetail";
 import AddOfferModal from "../components/AddOfferModal";
@@ -24,8 +27,12 @@ export default function Dashboard() {
     connected,
   } = useRegister();
   const { createListing, creating } = useCreateListing();
+  const anchorWallet = useAnchorWallet();
+  const { connection } = useConnection();
   const [products, setProducts] = useState<Product[]>([]);
   const [offers, setOffers] = useState<OfferDetail[]>([]);
+  const [togglingOffer, setTogglingOffer] = useState<string | null>(null);
+  const [waitingOffer, setWaitingOffer] = useState<{ id: string; label: string; expectedStatus: string } | null>(null);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
 
   useEffect(() => {
@@ -34,7 +41,20 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!registered || !walletMatch || !session) return;
-    getOffersByUser(session.user.id).then(setOffers).catch(console.error);
+    let unsubscribe: (() => void) | undefined;
+    getOffersByUser(session.user.id).then((loaded) => {
+      setOffers(loaded);
+      unsubscribe = watchOfferStatuses(
+        loaded.map((o) => o.id),
+        (offerId, status) => {
+          setOffers((prev) =>
+            prev.map((o) => (o.id === offerId ? { ...o, status: status as typeof o.status } : o)),
+          );
+          setWaitingOffer((prev) => (prev?.id === offerId ? null : prev));
+        },
+      );
+    }).catch(console.error);
+    return () => unsubscribe?.();
   }, [registered, walletMatch, session]);
 
   async function handleSignOut() {
@@ -54,6 +74,24 @@ export default function Dashboard() {
         { ...result.offer, status: "active", qr_listings: result.listing },
       ]);
       setOfferModalOpen(false);
+    }
+  }
+
+  async function handleTogglePause(offer: OfferDetail) {
+    if (!anchorWallet || !offer.qr_listings?.listing_pda) return;
+    setTogglingOffer(offer.id);
+    try {
+      if (offer.status === "active") {
+        await pauseListing(connection, anchorWallet, offer.qr_listings.listing_pda);
+        setWaitingOffer({ id: offer.id, label: "Pausing…", expectedStatus: "paused" });
+      } else if (offer.status === "paused") {
+        await resumeListing(connection, anchorWallet, offer.qr_listings.listing_pda);
+        setWaitingOffer({ id: offer.id, label: "Resuming…", expectedStatus: "active" });
+      }
+    } catch (err) {
+      console.error("toggle pause failed", err);
+    } finally {
+      setTogglingOffer(null);
     }
   }
 
@@ -201,19 +239,48 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                       {(offer.price_lamports / 1_000_000_000).toFixed(4)} SOL
                     </p>
-                    <span
-                      className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${
-                        offer.status === "active"
-                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                          : offer.status === "paused"
-                            ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                            : offer.status === "cancelled"
-                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                              : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-                      }`}
-                    >
-                      {offer.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          offer.status === "active"
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : offer.status === "paused"
+                              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : offer.status === "cancelled"
+                                ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                        }`}
+                      >
+                        {offer.status}
+                      </span>
+                      {(offer.status === "active" || offer.status === "paused") && offer.qr_listings?.listing_pda && (
+                        <button
+                          onClick={() => handleTogglePause(offer)}
+                          disabled={togglingOffer === offer.id || (waitingOffer?.id === offer.id && offer.status !== waitingOffer.expectedStatus)}
+                          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {offer.status === "active" ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+                              <rect x="3" y="2" width="3.5" height="12" rx="1" />
+                              <rect x="9.5" y="2" width="3.5" height="12" rx="1" />
+                            </svg>
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+                              <path d="M3 2.5a.5.5 0 0 1 .765-.424l10 5.5a.5.5 0 0 1 0 .848l-10 5.5A.5.5 0 0 1 3 13.5v-11z" />
+                            </svg>
+                          )}
+                          <span className="text-xs">
+                            {togglingOffer === offer.id
+                              ? "Confirm in wallet…"
+                              : waitingOffer?.id === offer.id && offer.status !== waitingOffer.expectedStatus
+                              ? waitingOffer.label
+                              : offer.status === "active"
+                              ? "Pause offer"
+                              : "Resume offer"}
+                          </span>
+                        </button>
+                      )}
+                    </div>
                     <div className="flex gap-2 mt-1">
                       <a
                         href={`/pay/${offer.id}`}

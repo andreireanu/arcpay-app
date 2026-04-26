@@ -43,6 +43,7 @@ export function useRegister() {
       const signature = await solanaRegister(connection, anchorWallet)
       await dbPromise  // wait for Helius webhook to confirm DB write
       setRegistered(true)
+      setRegisteredWallet(anchorWallet.publicKey.toBase58())
       return signature
     } catch (err) {
       cancelListener()
