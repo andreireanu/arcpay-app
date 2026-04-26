@@ -1,5 +1,5 @@
 import { Buffer } from 'buffer/'
-globalThis.Buffer = globalThis.Buffer ?? Buffer
+;(globalThis as unknown as Record<string, unknown>).Buffer ??= Buffer
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

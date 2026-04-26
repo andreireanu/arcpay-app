@@ -13,10 +13,6 @@ import type { Product } from "../types/product";
 import type { OfferDetail } from "../types/offerDetail";
 import AddOfferModal from "../components/AddOfferModal";
 
-function shortWallet(address: string) {
-  return `${address.slice(0, 4)}…${address.slice(-4)}`;
-}
-
 export default function Dashboard() {
   const { session, signOutUser } = useAuth();
   const {

@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer/'
 import {
   Ed25519Program,
   PublicKey,

@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer/'
 import { PublicKey, Transaction } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
 import type { AnchorWallet } from '@solana/wallet-adapter-react'
@@ -24,7 +25,8 @@ export async function createListing(
   )
 
   // Fetch listing_count to derive the listing PDA
-  const sellerProfile = await program.account.userProfile.fetch(sellerProfilePda)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sellerProfile = await (program.account as any).userProfile.fetch(sellerProfilePda)
   const listingCount = sellerProfile.listingCount as BN
 
   // Derive listing PDA: seeds = [b"listing", seller, listing_count (8 bytes LE)]
