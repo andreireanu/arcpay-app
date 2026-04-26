@@ -3,6 +3,6 @@ export interface Offer {
   name: string;
   description: string | null;
   price_lamports: number;
-  status: "unlisted" | "active" | "paused" | "cancelled" | "sold";
+  status: "unlisted" | "active" | "paused" | "canceled" | "sold";
   created_at: string;
 }

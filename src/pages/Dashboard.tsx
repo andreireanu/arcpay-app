@@ -8,6 +8,7 @@ import { getProducts } from "../supabase/products/products";
 import { getOffersByUser, watchOfferStatuses } from "../supabase/offers/offers";
 import { pauseListing } from "../solana/instructions/pauseListing";
 import { resumeListing } from "../solana/instructions/resumeListing";
+import { cancelListing } from "../solana/instructions/cancelListing";
 import type { Product } from "../types/product";
 import type { OfferDetail } from "../types/offerDetail";
 import AddOfferModal from "../components/AddOfferModal";
@@ -32,6 +33,7 @@ export default function Dashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [offers, setOffers] = useState<OfferDetail[]>([]);
   const [togglingOffer, setTogglingOffer] = useState<string | null>(null);
+  const [cancellingOffer, setCancellingOffer] = useState<string | null>(null);
   const [waitingOffer, setWaitingOffer] = useState<{ id: string; label: string; expectedStatus: string } | null>(null);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
 
@@ -41,21 +43,23 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!registered || !walletMatch || !session) return;
-    let unsubscribe: (() => void) | undefined;
-    getOffersByUser(session.user.id).then((loaded) => {
-      setOffers(loaded);
-      unsubscribe = watchOfferStatuses(
-        loaded.map((o) => o.id),
-        (offerId, status) => {
-          setOffers((prev) =>
-            prev.map((o) => (o.id === offerId ? { ...o, status: status as typeof o.status } : o)),
-          );
-          setWaitingOffer((prev) => (prev?.id === offerId ? null : prev));
-        },
-      );
-    }).catch(console.error);
-    return () => unsubscribe?.();
+    getOffersByUser(session.user.id).then(setOffers).catch(console.error);
   }, [registered, walletMatch, session]);
+
+  const offerIds = offers.map((o) => o.id).join(",");
+  useEffect(() => {
+    if (!offerIds) return;
+    return watchOfferStatuses(
+      offerIds.split(","),
+      (offerId, status) => {
+        setOffers((prev) =>
+          prev.map((o) => (o.id === offerId ? { ...o, status: status as typeof o.status } : o)),
+        );
+        setWaitingOffer((prev) => (prev?.id === offerId ? null : prev));
+        setCancellingOffer((prev) => (prev === offerId ? null : prev));
+      },
+    );
+  }, [offerIds]);
 
   async function handleSignOut() {
     await signOutUser();
@@ -92,6 +96,17 @@ export default function Dashboard() {
       console.error("toggle pause failed", err);
     } finally {
       setTogglingOffer(null);
+    }
+  }
+
+  async function handleCancel(offer: OfferDetail) {
+    if (!anchorWallet || !offer.qr_listings?.listing_pda) return;
+    setCancellingOffer(offer.id);
+    try {
+      await cancelListing(connection, anchorWallet, offer.qr_listings.listing_pda);
+    } catch (err) {
+      console.error("cancel failed", err);
+      setCancellingOffer(null);
     }
   }
 
@@ -246,39 +261,55 @@ export default function Dashboard() {
                             ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                             : offer.status === "paused"
                               ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                              : offer.status === "cancelled"
+                              : offer.status === "canceled"
                                 ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                                : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                                : offer.status === "sold"
+                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                  : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
                         }`}
                       >
                         {offer.status}
                       </span>
                       {(offer.status === "active" || offer.status === "paused") && offer.qr_listings?.listing_pda && (
-                        <button
-                          onClick={() => handleTogglePause(offer)}
-                          disabled={togglingOffer === offer.id || (waitingOffer?.id === offer.id && offer.status !== waitingOffer.expectedStatus)}
-                          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {offer.status === "active" ? (
+                        <>
+                          <button
+                            onClick={() => handleTogglePause(offer)}
+                            disabled={togglingOffer === offer.id || (waitingOffer?.id === offer.id && offer.status !== waitingOffer.expectedStatus) || cancellingOffer === offer.id}
+                            className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {offer.status === "active" ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+                                <rect x="3" y="2" width="3.5" height="12" rx="1" />
+                                <rect x="9.5" y="2" width="3.5" height="12" rx="1" />
+                              </svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+                                <path d="M3 2.5a.5.5 0 0 1 .765-.424l10 5.5a.5.5 0 0 1 0 .848l-10 5.5A.5.5 0 0 1 3 13.5v-11z" />
+                              </svg>
+                            )}
+                            <span className="text-xs">
+                              {togglingOffer === offer.id
+                                ? "Confirm in wallet…"
+                                : waitingOffer?.id === offer.id && offer.status !== waitingOffer.expectedStatus
+                                ? waitingOffer.label
+                                : offer.status === "active"
+                                ? "Pause offer"
+                                : "Resume offer"}
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => handleCancel(offer)}
+                            disabled={cancellingOffer === offer.id || togglingOffer === offer.id}
+                            className="flex items-center gap-1.5 text-red-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
-                              <rect x="3" y="2" width="3.5" height="12" rx="1" />
-                              <rect x="9.5" y="2" width="3.5" height="12" rx="1" />
+                              <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22z" />
                             </svg>
-                          ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
-                              <path d="M3 2.5a.5.5 0 0 1 .765-.424l10 5.5a.5.5 0 0 1 0 .848l-10 5.5A.5.5 0 0 1 3 13.5v-11z" />
-                            </svg>
-                          )}
-                          <span className="text-xs">
-                            {togglingOffer === offer.id
-                              ? "Confirm in wallet…"
-                              : waitingOffer?.id === offer.id && offer.status !== waitingOffer.expectedStatus
-                              ? waitingOffer.label
-                              : offer.status === "active"
-                              ? "Pause offer"
-                              : "Resume offer"}
-                          </span>
-                        </button>
+                            <span className="text-xs">
+                              {cancellingOffer === offer.id ? "Cancelling…" : "Cancel offer"}
+                            </span>
+                          </button>
+                        </>
                       )}
                     </div>
                     <div className="flex gap-2 mt-1">

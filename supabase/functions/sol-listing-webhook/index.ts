@@ -37,11 +37,13 @@ Deno.serve(async (req) => {
 
   const siteUrl = Deno.env.get("SITE_URL")!;
 
-  const [discCreated, discPaused, discResumed] = await Promise.all([
-    discriminator("ListingCreated"),
-    discriminator("ListingPaused"),
-    discriminator("ListingResumed"),
-  ]);
+  const [discCreated, discPaused, discResumed, discCancelled] =
+    await Promise.all([
+      discriminator("ListingCreated"),
+      discriminator("ListingPaused"),
+      discriminator("ListingResumed"),
+      discriminator("ListingCancelled"),
+    ]);
 
   for (const tx of transactions) {
     const logs: string[] = tx.meta?.logMessages ?? tx.logs ?? [];
@@ -71,16 +73,26 @@ Deno.serve(async (req) => {
             contentType: "image/svg+xml",
             upsert: true,
           });
-        if (uploadError) { console.error("upload error", uploadError); continue; }
+        if (uploadError) {
+          console.error("upload error", uploadError);
+          continue;
+        }
 
-        const { data: { publicUrl } } = supabase.storage
-          .from("qr-codes")
-          .getPublicUrl(`${offerId}.svg`);
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("qr-codes").getPublicUrl(`${offerId}.svg`);
 
         const { error: listingError } = await supabase
           .from("qr_listings")
-          .insert({ offer_id: offerId, listing_pda: listingPda, qr_url: publicUrl });
-        if (listingError) { console.error("listing insert error", listingError); continue; }
+          .insert({
+            offer_id: offerId,
+            listing_pda: listingPda,
+            qr_url: publicUrl,
+          });
+        if (listingError) {
+          console.error("listing insert error", listingError);
+          continue;
+        }
 
         const { error: statusError } = await supabase
           .from("qr_offers_data")
@@ -90,17 +102,29 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // ListingPaused / ListingResumed: 8 disc + 32 listing + 32 seller + 8 timestamp = 80 bytes
-      if (bytes.length >= 80 && (arraysEqual(disc, discPaused) || arraysEqual(disc, discResumed))) {
+      // ListingPaused / ListingResumed / ListingCancelled: 8 disc + 32 listing + 32 seller + 8 timestamp = 80 bytes
+      if (
+        bytes.length >= 80 &&
+        (arraysEqual(disc, discPaused) ||
+          arraysEqual(disc, discResumed) ||
+          arraysEqual(disc, discCancelled))
+      ) {
         const listingPda = new PublicKey(bytes.slice(8, 40)).toBase58();
-        const newStatus = arraysEqual(disc, discPaused) ? "paused" : "active";
+        const newStatus = arraysEqual(disc, discPaused)
+          ? "paused"
+          : arraysEqual(disc, discCancelled)
+            ? "canceled"
+            : "active";
 
         const { data: listing } = await supabase
           .from("qr_listings")
           .select("offer_id")
           .eq("listing_pda", listingPda)
           .single();
-        if (!listing) { console.error("listing not found", listingPda); continue; }
+        if (!listing) {
+          console.error("listing not found", listingPda);
+          continue;
+        }
 
         const { error } = await supabase
           .from("qr_offers_data")

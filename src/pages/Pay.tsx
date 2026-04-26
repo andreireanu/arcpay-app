@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
+import {
+  useAnchorWallet,
+  useConnection,
+  useWallet,
+} from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { getOffer, watchOfferStatus } from "../supabase/offers/offers";
 import { acceptListing } from "../solana/instructions/acceptListing";
 import type { OfferDetail } from "../types/offerDetail";
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; className: string }> = {
   active: {
     label: "Active",
     className:
@@ -17,8 +21,8 @@ const statusConfig = {
     className:
       "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
   },
-  cancelled: {
-    label: "Cancelled",
+  canceled: {
+    label: "Canceled",
     className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   },
   unlisted: {
@@ -27,7 +31,8 @@ const statusConfig = {
   },
   sold: {
     label: "Sold",
-    className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    className:
+      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   },
 };
 
@@ -51,7 +56,9 @@ export default function Pay() {
       .finally(() => setLoading(false));
 
     const unsubscribe = watchOfferStatus(offerId, (status) => {
-      setOffer((prev) => prev ? { ...prev, status: status as typeof prev.status } : prev);
+      setOffer((prev) =>
+        prev ? { ...prev, status: status as typeof prev.status } : prev,
+      );
     });
     return unsubscribe;
   }, [offerId]);
@@ -74,8 +81,12 @@ export default function Pay() {
 
   const listing = offer.qr_listings;
   const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
-  const { label: statusLabel, className: statusClass } =
-    statusConfig[offer.status];
+  const { label: statusLabel, className: statusClass } = statusConfig[
+    offer.status
+  ] ?? {
+    label: offer.status,
+    className: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+  };
   const canBuy = offer.status === "active" && listing && !bought;
 
   async function handleBuy() {
@@ -96,7 +107,6 @@ export default function Pay() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-
         {/* Image */}
         <div className="w-full aspect-square rounded-t-2xl bg-gray-100 dark:bg-gray-800" />
 
@@ -120,8 +130,10 @@ export default function Pay() {
           )}
 
           {/* Status — only show if not active */}
-          {offer.status !== 'active' && (
-            <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${statusClass}`}>
+          {offer.status !== "active" && (
+            <span
+              className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${statusClass}`}
+            >
               {statusLabel}
             </span>
           )}
@@ -142,7 +154,9 @@ export default function Pay() {
                   {buying ? "Confirm in wallet…" : "Buy"}
                 </button>
               ) : (
-                <WalletMultiButton style={{ width: '100%', justifyContent: 'center' }} />
+                <WalletMultiButton
+                  style={{ width: "100%", justifyContent: "center" }}
+                />
               )}
               {buyError && (
                 <p className="text-xs text-red-500 mt-1">{buyError}</p>
@@ -150,11 +164,11 @@ export default function Pay() {
             </>
           ) : (
             <p className="text-xs text-gray-400 dark:text-gray-500 py-2">
-              {offer.status === 'unlisted' || !listing
-                ? 'This listing is not yet confirmed on-chain.'
-                : offer.status === 'sold'
-                ? 'This item has already been sold.'
-                : `This listing is currently ${offer.status}.`}
+              {offer.status === "unlisted" || !listing
+                ? "This listing is not yet confirmed on-chain."
+                : offer.status === "sold"
+                  ? "This item has already been sold."
+                  : `This listing is currently ${offer.status}.`}
             </p>
           )}
         </div>
