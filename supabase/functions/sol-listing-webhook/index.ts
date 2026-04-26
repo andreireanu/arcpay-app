@@ -14,6 +14,42 @@ function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
+async function buildQrWithLogo(payUrl: string): Promise<string> {
+  const svg: string = await QRCode.toString(payUrl, {
+    type: "svg",
+    errorCorrectionLevel: "H",
+  });
+
+  let logoData: string | null = null;
+  try {
+    const resp = await fetch("https://twjaooacmrveivxxfwyx.supabase.co/storage/v1/object/public/assets/favicon.svg");
+    if (resp.ok) {
+      const buf = await resp.arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      logoData = `data:image/svg+xml;base64,${b64}`;
+    }
+  } catch { /* generate QR without logo if fetch fails */ }
+
+  if (!logoData) return svg;
+
+  const match = svg.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/);
+  if (!match) return svg;
+  const w = parseFloat(match[1]);
+  const h = parseFloat(match[2]);
+
+  const logoSize = Math.round(w * 0.22);
+  const pad = 3;
+  const x = Math.round((w - logoSize) / 2);
+  const y = Math.round((h - logoSize) / 2);
+
+  const overlay = [
+    `<rect x="${x - pad}" y="${y - pad}" width="${logoSize + pad * 2}" height="${logoSize + pad * 2}" fill="white" rx="${pad}"/>`,
+    `<image href="${logoData}" x="${x}" y="${y}" width="${logoSize}" height="${logoSize}"/>`,
+  ].join("");
+
+  return svg.replace("</svg>", `${overlay}</svg>`);
+}
+
 function bytesToUuid(bytes: Uint8Array): string {
   const hex = Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -65,7 +101,7 @@ Deno.serve(async (req) => {
         const offerId = bytesToUuid(bytes.slice(80, 96));
 
         const payUrl = `${siteUrl}/pay/${offerId}`;
-        const svg: string = await QRCode.toString(payUrl, { type: "svg" });
+        const svg = await buildQrWithLogo(payUrl);
 
         const { error: uploadError } = await supabase.storage
           .from("qr-codes")
