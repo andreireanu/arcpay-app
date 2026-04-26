@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { getOffer } from "../supabase/offers/offers";
+import { getOffer, watchOfferStatus } from "../supabase/offers/offers";
 import { acceptListing } from "../solana/instructions/acceptListing";
 import type { OfferDetail } from "../types/offerDetail";
 
@@ -49,6 +49,11 @@ export default function Pay() {
       .then(setOffer)
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    const unsubscribe = watchOfferStatus(offerId, (status) => {
+      setOffer((prev) => prev ? { ...prev, status: status as typeof prev.status } : prev);
+    });
+    return unsubscribe;
   }, [offerId]);
 
   if (loading) {

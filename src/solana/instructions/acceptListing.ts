@@ -11,7 +11,6 @@ export async function acceptListing(
   const program = getProgram(connection, wallet)
   const listing = new PublicKey(listingPda)
 
-  // seller is resolved automatically by Anchor from the listing account (relations: ["listing"])
   const ix = await program.methods
     .acceptListing()
     .accounts({ buyer: wallet.publicKey, listing })

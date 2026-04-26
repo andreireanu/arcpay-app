@@ -41,7 +41,7 @@ export default function Register() {
       <div className="w-full max-w-sm bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl p-8 shadow-sm">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50 text-center mb-1">Arc Pay</h1>
         <h2 className="text-lg text-gray-500 dark:text-gray-400 text-center mb-6">Create account</h2>
-        <form action={submitAction} className="flex flex-col gap-4">
+        <form action={submitAction} className="flex flex-col gap-4" autoComplete="off">
           <div className="flex flex-col gap-1">
             <label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Email
@@ -50,6 +50,7 @@ export default function Register() {
               type="email"
               id="email"
               name="email"
+              autoComplete="off"
               required
               disabled={isPending}
               className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
@@ -63,6 +64,7 @@ export default function Register() {
               type="password"
               id="password"
               name="password"
+              autoComplete="new-password"
               minLength={6}
               required
               disabled={isPending}

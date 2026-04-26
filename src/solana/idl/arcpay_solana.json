@@ -37,6 +37,25 @@
           "writable": true
         },
         {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
@@ -457,6 +476,54 @@
           "type": "u16"
         }
       ]
+    },
+    {
+      "name": "withdraw_commission",
+      "discriminator": [
+        136,
+        85,
+        112,
+        153,
+        166,
+        99,
+        191,
+        5
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -620,6 +687,11 @@
       "code": 6007,
       "name": "InvalidAuthorizationSignature",
       "msg": "Invalid backend authorization signature"
+    },
+    {
+      "code": 6008,
+      "name": "InsufficientCommissionBalance",
+      "msg": "Withdrawal amount exceeds available commission balance"
     }
   ],
   "types": [
@@ -690,6 +762,10 @@
           },
           {
             "name": "amount_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "fee_lamports",
             "type": "u64"
           },
           {
