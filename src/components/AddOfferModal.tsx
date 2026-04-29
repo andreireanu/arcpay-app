@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 interface Props {
   open: boolean
@@ -11,6 +11,14 @@ export default function AddOfferModal({ open, onClose, onSubmit, creating }: Pro
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [price, setPrice] = useState("")
+
+  useEffect(() => {
+    if (!open) {
+      setName("")
+      setDescription("")
+      setPrice("")
+    }
+  }, [open])
 
   if (!open) return null
 
@@ -80,7 +88,7 @@ export default function AddOfferModal({ open, onClose, onSubmit, creating }: Pro
           </button>
           <button
             onClick={() => onSubmit(name, description, Math.round(parseFloat(price) * 1_000_000_000))}
-            disabled={name.length < 10 || description.length < 10 || !price || creating}
+            disabled={name.length < 3 || description.length < 3 || !price || creating}
             className="flex-1 py-2 px-4 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
           >
             {creating ? 'Creating…' : 'Create'}

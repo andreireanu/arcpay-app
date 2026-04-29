@@ -1,16 +1,23 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PublicKey } from "https://esm.sh/@solana/web3.js@1";
 
-async function listingAcceptedDiscriminator(): Promise<Uint8Array> {
+async function buyCompletedDiscriminator(): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode("event:ListingAccepted"),
+    new TextEncoder().encode("event:BuyCompleted"),
   );
   return new Uint8Array(hash, 0, 8);
 }
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+function bytesToUuid(bytes: Uint8Array): string {
+  const hex = Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
 Deno.serve(async (req) => {
@@ -27,7 +34,7 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const disc = await listingAcceptedDiscriminator();
+  const disc = await buyCompletedDiscriminator();
 
   for (const tx of transactions) {
     const logs: string[] = tx.meta?.logMessages ?? tx.logs ?? [];
@@ -41,42 +48,31 @@ Deno.serve(async (req) => {
         (c) => c.charCodeAt(0),
       );
 
-      // ListingAccepted: 8 disc + 32 listing + 32 buyer + 32 seller + 8 amount + 8 timestamp = 120 bytes
-      if (bytes.length < 120 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
+      // BuyCompleted: 8 disc + 16 offer_id + 32 buyer + 32 seller + 8 seller_amount + 8 fee_amount + 8 timestamp = 112 bytes
+      if (bytes.length < 112 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
 
-      const listingPda = new PublicKey(bytes.slice(8, 40)).toBase58();
-      const buyerWallet = new PublicKey(bytes.slice(40, 72)).toBase58();
-      const priceLamports = Number(
-        new DataView(bytes.buffer, bytes.byteOffset + 104, 8).getBigUint64(0, true),
-      );
+      const offerId = bytesToUuid(bytes.slice(8, 24));
+      const buyerWallet = new PublicKey(bytes.slice(24, 56)).toBase58();
+      const sellerWallet = new PublicKey(bytes.slice(56, 88)).toBase58();
+      const sellerAmount = Number(new DataView(bytes.buffer, bytes.byteOffset + 88, 8).getBigUint64(0, true));
+      const feeAmount = Number(new DataView(bytes.buffer, bytes.byteOffset + 96, 8).getBigUint64(0, true));
 
       const { error: txError } = await supabase
         .from("qr_transactions")
         .insert({
-          listing_pda: listingPda,
+          offer_id: offerId,
           buyer_wallet: buyerWallet,
+          seller_wallet: sellerWallet,
           tx_signature: txSignature,
-          price_lamports: priceLamports,
+          seller_amount: sellerAmount,
+          fee_amount: feeAmount,
         });
-      if (txError) {
-        console.error("transaction insert error", txError);
-        continue;
-      }
-
-      const { data: listing, error: listingError } = await supabase
-        .from("qr_listings")
-        .select("offer_id")
-        .eq("listing_pda", listingPda)
-        .single();
-      if (listingError || !listing) {
-        console.error("listing lookup error", listingError);
-        continue;
-      }
+      if (txError) console.error("transaction insert error", txError);
 
       const { error: statusError } = await supabase
-        .from("qr_offers_data")
+        .from("qr_offers")
         .update({ status: "sold" })
-        .eq("id", listing.offer_id);
+        .eq("id", offerId);
       if (statusError) console.error("status update error", statusError);
     }
   }

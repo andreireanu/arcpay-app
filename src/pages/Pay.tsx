@@ -7,8 +7,8 @@ import {
 } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { getOffer, watchOfferStatus } from "../supabase/offers/offers";
-import { acceptListing } from "../solana/instructions/acceptListing";
-import type { OfferDetail } from "../types/offerDetail";
+import { buy } from "../solana/instructions/buy";
+import type { Offer } from "../types/offer";
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   active: {
@@ -25,10 +25,6 @@ const statusConfig: Record<string, { label: string; className: string }> = {
     label: "Canceled",
     className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   },
-  unlisted: {
-    label: "Pending",
-    className: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-  },
   sold: {
     label: "Sold",
     className:
@@ -38,7 +34,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 
 export default function Pay() {
   const { offerId } = useParams<{ offerId: string }>();
-  const [offer, setOffer] = useState<OfferDetail | null>(null);
+  const [offer, setOffer] = useState<Offer | null>(null);
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState(false);
   const [bought, setBought] = useState(false);
@@ -57,7 +53,7 @@ export default function Pay() {
 
     const unsubscribe = watchOfferStatus(offerId, (status) => {
       setOffer((prev) =>
-        prev ? { ...prev, status: status as typeof prev.status } : prev,
+        prev ? { ...prev, status: status as Offer["status"] } : prev,
       );
     });
     return unsubscribe;
@@ -79,23 +75,19 @@ export default function Pay() {
     );
   }
 
-  const listing = offer.qr_listings;
   const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
-  const { label: statusLabel, className: statusClass } = statusConfig[
-    offer.status
-  ] ?? {
+  const { label: statusLabel, className: statusClass } = statusConfig[offer.status] ?? {
     label: offer.status,
     className: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   };
-  const canBuy = offer.status === "active" && listing && !bought;
+  const canBuy = offer.status === "active" && !bought;
 
   async function handleBuy() {
-    if (!listing) return;
-    if (!anchorWallet || !connected) return;
+    if (!anchorWallet || !connected || !offerId) return;
     setBuyError(null);
     setBuying(true);
     try {
-      await acceptListing(connection, anchorWallet, listing.listing_pda);
+      await buy(connection, anchorWallet, offerId);
       setBought(true);
     } catch (err) {
       setBuyError(err instanceof Error ? err.message : "Transaction failed");
@@ -107,12 +99,9 @@ export default function Pay() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        {/* Image */}
         <div className="w-full aspect-square rounded-t-2xl bg-gray-100 dark:bg-gray-800" />
 
-        {/* Card */}
         <div className="bg-white dark:bg-gray-950 rounded-b-2xl border border-t-0 border-gray-200 dark:border-gray-700 px-5 py-6 flex flex-col gap-4">
-          {/* Title */}
           <div>
             <h1 className="text-xl font-bold text-purple-600 uppercase leading-tight tracking-tight">
               {offer.name}
@@ -122,23 +111,18 @@ export default function Pay() {
             </p>
           </div>
 
-          {/* Description */}
           {offer.description && (
             <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
               {offer.description}
             </p>
           )}
 
-          {/* Status — only show if not active */}
           {offer.status !== "active" && (
-            <span
-              className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${statusClass}`}
-            >
+            <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${statusClass}`}>
               {statusLabel}
             </span>
           )}
 
-          {/* Action */}
           {bought ? (
             <p className="text-sm text-green-600 dark:text-green-400 font-medium py-2">
               Payment sent! The seller will confirm your order.
@@ -154,9 +138,7 @@ export default function Pay() {
                   {buying ? "Confirm in wallet…" : "Buy"}
                 </button>
               ) : (
-                <WalletMultiButton
-                  style={{ width: "100%", justifyContent: "center" }}
-                />
+                <WalletMultiButton style={{ width: "100%", justifyContent: "center" }} />
               )}
               {buyError && (
                 <p className="text-xs text-red-500 mt-1">{buyError}</p>
@@ -164,11 +146,9 @@ export default function Pay() {
             </>
           ) : (
             <p className="text-xs text-gray-400 dark:text-gray-500 py-2">
-              {offer.status === "unlisted" || !listing
-                ? "This listing is not yet confirmed on-chain."
-                : offer.status === "sold"
-                  ? "This item has already been sold."
-                  : `This listing is currently ${offer.status}.`}
+              {offer.status === "sold"
+                ? "This item has already been sold."
+                : `This listing is currently ${offer.status}.`}
             </p>
           )}
         </div>

@@ -1,5 +1,5 @@
 {
-  "address": "4TmDTsMfaftRVdDRuMvpBkJgoTUgxrqC9vE2vNGKqLBp",
+  "address": "6KELPQtzV7uchqQC2xEAL7u2BR2Hh5cP57YYUgRpnsed",
   "metadata": {
     "name": "arcpay_solana",
     "version": "0.1.0",
@@ -8,16 +8,16 @@
   },
   "instructions": [
     {
-      "name": "accept_listing",
+      "name": "buy",
       "discriminator": [
-        73,
-        126,
-        21,
-        99,
-        71,
-        13,
-        177,
-        202
+        102,
+        6,
+        61,
+        18,
+        1,
+        218,
+        235,
+        234
       ],
       "accounts": [
         {
@@ -27,13 +27,6 @@
         },
         {
           "name": "seller",
-          "writable": true,
-          "relations": [
-            "listing"
-          ]
-        },
-        {
-          "name": "listing",
           "writable": true
         },
         {
@@ -56,107 +49,8 @@
           }
         },
         {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "cancel_listing",
-      "discriminator": [
-        41,
-        183,
-        50,
-        232,
-        230,
-        233,
-        157,
-        70
-      ],
-      "accounts": [
-        {
-          "name": "seller",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "listing"
-          ]
-        },
-        {
-          "name": "listing",
-          "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "create_listing",
-      "discriminator": [
-        18,
-        168,
-        45,
-        24,
-        191,
-        31,
-        117,
-        54
-      ],
-      "accounts": [
-        {
-          "name": "seller",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "seller_profile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  117,
-                  115,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "seller"
-              }
-            ]
-          }
-        },
-        {
-          "name": "listing",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  108,
-                  105,
-                  115,
-                  116,
-                  105,
-                  110,
-                  103
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "seller"
-              },
-              {
-                "kind": "account",
-                "path": "seller_profile.listing_count",
-                "account": "UserProfile"
-              }
-            ]
-          }
+          "name": "instructions_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
         },
         {
           "name": "system_program",
@@ -165,17 +59,25 @@
       ],
       "args": [
         {
-          "name": "price_lamports",
+          "name": "seller_amount",
           "type": "u64"
         },
         {
-          "name": "uuid",
+          "name": "fee_amount",
+          "type": "u64"
+        },
+        {
+          "name": "offer_id",
           "type": {
             "array": [
               "u8",
               16
             ]
           }
+        },
+        {
+          "name": "expiry",
+          "type": "i64"
         }
       ]
     },
@@ -225,255 +127,6 @@
         {
           "name": "backend_pubkey",
           "type": "pubkey"
-        }
-      ]
-    },
-    {
-      "name": "pause_listing",
-      "discriminator": [
-        75,
-        202,
-        39,
-        2,
-        84,
-        194,
-        118,
-        124
-      ],
-      "accounts": [
-        {
-          "name": "seller",
-          "signer": true,
-          "relations": [
-            "listing"
-          ]
-        },
-        {
-          "name": "listing",
-          "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "register",
-      "discriminator": [
-        211,
-        124,
-        67,
-        15,
-        211,
-        194,
-        178,
-        240
-      ],
-      "accounts": [
-        {
-          "name": "user",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "user_profile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  117,
-                  115,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "config",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  102,
-                  105,
-                  103
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "instructions_sysvar",
-          "address": "Sysvar1nstructions1111111111111111111111111"
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "expiry",
-          "type": "i64"
-        },
-        {
-          "name": "uuid",
-          "type": {
-            "array": [
-              "u8",
-              16
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "remove_registration",
-      "discriminator": [
-        65,
-        50,
-        199,
-        198,
-        14,
-        117,
-        85,
-        244
-      ],
-      "accounts": [
-        {
-          "name": "admin",
-          "signer": true,
-          "relations": [
-            "config"
-          ]
-        },
-        {
-          "name": "config",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  102,
-                  105,
-                  103
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "wallet",
-          "writable": true
-        },
-        {
-          "name": "user_profile",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  117,
-                  115,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "wallet"
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "resume_listing",
-      "discriminator": [
-        67,
-        33,
-        74,
-        65,
-        38,
-        163,
-        130,
-        241
-      ],
-      "accounts": [
-        {
-          "name": "seller",
-          "signer": true,
-          "relations": [
-            "listing"
-          ]
-        },
-        {
-          "name": "listing",
-          "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "update_config",
-      "discriminator": [
-        29,
-        158,
-        252,
-        191,
-        10,
-        83,
-        219,
-        99
-      ],
-      "accounts": [
-        {
-          "name": "admin",
-          "signer": true,
-          "relations": [
-            "config"
-          ]
-        },
-        {
-          "name": "config",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  102,
-                  105,
-                  103
-                ]
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "commission_bps",
-          "type": "u16"
         }
       ]
     },
@@ -539,98 +192,20 @@
         204,
         130
       ]
-    },
-    {
-      "name": "Listing",
-      "discriminator": [
-        218,
-        32,
-        50,
-        73,
-        43,
-        134,
-        26,
-        58
-      ]
-    },
-    {
-      "name": "UserProfile",
-      "discriminator": [
-        32,
-        37,
-        119,
-        205,
-        179,
-        180,
-        13,
-        194
-      ]
     }
   ],
   "events": [
     {
-      "name": "ListingAccepted",
+      "name": "BuyCompleted",
       "discriminator": [
-        228,
-        87,
-        117,
-        80,
-        96,
-        31,
-        4,
-        48
-      ]
-    },
-    {
-      "name": "ListingCancelled",
-      "discriminator": [
-        11,
-        46,
-        163,
-        10,
+        215,
+        135,
+        249,
+        224,
+        229,
         103,
-        80,
-        139,
-        194
-      ]
-    },
-    {
-      "name": "ListingCreated",
-      "discriminator": [
-        94,
-        164,
-        167,
-        255,
-        246,
-        186,
-        12,
-        96
-      ]
-    },
-    {
-      "name": "ListingPaused",
-      "discriminator": [
-        92,
-        217,
-        150,
-        243,
-        157,
-        221,
-        185,
-        128
-      ]
-    },
-    {
-      "name": "ListingResumed",
-      "discriminator": [
-        193,
-        104,
-        184,
-        157,
-        245,
-        48,
-        184,
-        109
+        11,
+        29
       ]
     },
     {
@@ -696,6 +271,43 @@
   ],
   "types": [
     {
+      "name": "BuyCompleted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "offer_id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller_amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee_amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Config",
       "type": {
         "kind": "struct",
@@ -707,179 +319,6 @@
           {
             "name": "backend_pubkey",
             "type": "pubkey"
-          },
-          {
-            "name": "commission_bps",
-            "type": "u16"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "Listing",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "seller",
-            "type": "pubkey"
-          },
-          {
-            "name": "price_lamports",
-            "type": "u64"
-          },
-          {
-            "name": "is_active",
-            "type": "bool"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "ListingAccepted",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "listing",
-            "type": "pubkey"
-          },
-          {
-            "name": "buyer",
-            "type": "pubkey"
-          },
-          {
-            "name": "seller",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount_lamports",
-            "type": "u64"
-          },
-          {
-            "name": "fee_lamports",
-            "type": "u64"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "ListingCancelled",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "listing",
-            "type": "pubkey"
-          },
-          {
-            "name": "seller",
-            "type": "pubkey"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "ListingCreated",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "listing",
-            "type": "pubkey"
-          },
-          {
-            "name": "seller",
-            "type": "pubkey"
-          },
-          {
-            "name": "price_lamports",
-            "type": "u64"
-          },
-          {
-            "name": "uuid",
-            "type": {
-              "array": [
-                "u8",
-                16
-              ]
-            }
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "ListingPaused",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "listing",
-            "type": "pubkey"
-          },
-          {
-            "name": "seller",
-            "type": "pubkey"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "ListingResumed",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "listing",
-            "type": "pubkey"
-          },
-          {
-            "name": "seller",
-            "type": "pubkey"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "UserProfile",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "wallet",
-            "type": "pubkey"
-          },
-          {
-            "name": "listing_count",
-            "type": "u64"
           },
           {
             "name": "bump",

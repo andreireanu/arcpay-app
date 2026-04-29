@@ -1,61 +1,47 @@
 import { useEffect, useState } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { useAnchorWallet, useConnection } from "@solana/wallet-adapter-react";
+import { useAnchorWallet } from "@solana/wallet-adapter-react";
+import QRCode from "qrcode";
 import { useAuth } from "../hooks/useAuth";
 import { useRegister } from "../hooks/useRegister";
 import { useCreateListing } from "../hooks/useCreateListing";
-import { getProducts } from "../supabase/products/products";
-import { getOffersByUser, watchOfferStatuses } from "../supabase/offers/offers";
-import { pauseListing } from "../solana/instructions/pauseListing";
-import { resumeListing } from "../solana/instructions/resumeListing";
-import { cancelListing } from "../solana/instructions/cancelListing";
-import type { Product } from "../types/product";
-import type { OfferDetail } from "../types/offerDetail";
+import {
+  getOffersByWallet,
+  pauseOffer,
+  resumeOffer,
+  cancelOffer,
+  watchOfferStatuses,
+} from "../supabase/offers/offers";
+import type { Offer } from "../types/offer";
 import AddOfferModal from "../components/AddOfferModal";
 
 export default function Dashboard() {
   const { session, signOutUser } = useAuth();
-  const {
-    register,
-    registering,
-    registered,
-    registeredWallet,
-    walletMatch,
-    connected,
-  } = useRegister();
+  const { register, registering, registered, error: registerError } = useRegister();
   const { createListing, creating } = useCreateListing();
   const anchorWallet = useAnchorWallet();
-  const { connection } = useConnection();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [offers, setOffers] = useState<OfferDetail[]>([]);
-  const [togglingOffer, setTogglingOffer] = useState<string | null>(null);
-  const [cancellingOffer, setCancellingOffer] = useState<string | null>(null);
-  const [waitingOffer, setWaitingOffer] = useState<{ id: string; label: string; expectedStatus: string } | null>(null);
+  const walletAddress = anchorWallet?.publicKey?.toBase58();
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
+  const [togglingOffer, setTogglingOffer] = useState<{ id: string; label: string } | null>(null);
 
   useEffect(() => {
-    getProducts().then(setProducts).catch(console.error);
-  }, []);
+    if (!registered || !walletAddress) return;
+    getOffersByWallet(walletAddress).then(setOffers).catch(console.error);
+  }, [registered, walletAddress]);
 
+  const offerIds = offers.map((o) => o.id);
   useEffect(() => {
-    if (!registered || !walletMatch || !session) return;
-    getOffersByUser(session.user.id).then(setOffers).catch(console.error);
-  }, [registered, walletMatch, session]);
-
-  const offerIds = offers.map((o) => o.id).join(",");
-  useEffect(() => {
-    if (!offerIds) return;
-    return watchOfferStatuses(
-      offerIds.split(","),
-      (offerId, status) => {
-        setOffers((prev) =>
-          prev.map((o) => (o.id === offerId ? { ...o, status: status as typeof o.status } : o)),
-        );
-        setWaitingOffer((prev) => (prev?.id === offerId ? null : prev));
-        setCancellingOffer((prev) => (prev === offerId ? null : prev));
-      },
-    );
-  }, [offerIds]);
+    if (offerIds.length === 0) return;
+    return watchOfferStatuses(offerIds, (offerId, status) => {
+      setOffers((prev) =>
+        prev.map((o) =>
+          o.id === offerId ? { ...o, status: status as Offer["status"] } : o,
+        ),
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offerIds.join(",")]);
 
   async function handleSignOut() {
     await signOutUser();
@@ -67,54 +53,77 @@ export default function Dashboard() {
     description: string,
     priceLamports: number,
   ) {
-    const result = await createListing(name, description, priceLamports);
-    if (result) {
-      setOffers((prev) => [
-        ...prev,
-        { ...result.offer, status: "active", qr_listings: result.listing },
-      ]);
+    const offer = await createListing(name, description, priceLamports);
+    if (offer) {
+      setOffers((prev) => [offer, ...prev]);
       setOfferModalOpen(false);
     }
   }
 
-  async function handleTogglePause(offer: OfferDetail) {
-    if (!anchorWallet || !offer.qr_listings?.listing_pda) return;
-    setTogglingOffer(offer.id);
+  async function handlePause(offer: Offer) {
+    setTogglingOffer({ id: offer.id, label: "Pausing…" });
+    await pauseOffer(offer.id);
+    setOffers((prev) =>
+      prev.map((o) => (o.id === offer.id ? { ...o, status: "paused" } : o)),
+    );
+    setTogglingOffer(null);
+  }
+
+  async function handleResume(offer: Offer) {
+    setTogglingOffer({ id: offer.id, label: "Resuming…" });
+    await resumeOffer(offer.id);
+    setOffers((prev) =>
+      prev.map((o) => (o.id === offer.id ? { ...o, status: "active" } : o)),
+    );
+    setTogglingOffer(null);
+  }
+
+  async function handleCancel(offer: Offer) {
+    await cancelOffer(offer.id);
+    setOffers((prev) =>
+      prev.map((o) => (o.id === offer.id ? { ...o, status: "canceled" } : o)),
+    );
+  }
+
+  async function handleDownloadQr(offer: Offer) {
+    const url = `${window.location.origin}/pay/${offer.id}`;
+    let svg: string = await QRCode.toString(url, {
+      type: "svg",
+      errorCorrectionLevel: "H",
+    });
+
     try {
-      if (offer.status === "active") {
-        await pauseListing(connection, anchorWallet, offer.qr_listings.listing_pda);
-        setWaitingOffer({ id: offer.id, label: "Pausing…", expectedStatus: "paused" });
-      } else if (offer.status === "paused") {
-        await resumeListing(connection, anchorWallet, offer.qr_listings.listing_pda);
-        setWaitingOffer({ id: offer.id, label: "Resuming…", expectedStatus: "active" });
+      const resp = await fetch("/favicon.svg");
+      if (resp.ok) {
+        const b64 = btoa(await resp.text());
+        const logoData = `data:image/svg+xml;base64,${b64}`;
+        const match = svg.match(
+          /viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/,
+        );
+        if (match) {
+          const w = parseFloat(match[1]);
+          const h = parseFloat(match[2]);
+          const logoSize = Math.round(w * 0.22);
+          const pad = 3;
+          const x = Math.round((w - logoSize) / 2);
+          const y = Math.round((h - logoSize) / 2);
+          const overlay = [
+            `<rect x="${x - pad}" y="${y - pad}" width="${logoSize + pad * 2}" height="${logoSize + pad * 2}" fill="white" rx="${pad}"/>`,
+            `<image href="${logoData}" x="${x}" y="${y}" width="${logoSize}" height="${logoSize}"/>`,
+          ].join("");
+          svg = svg.replace("</svg>", `${overlay}</svg>`);
+        }
       }
-    } catch (err) {
-      console.error("toggle pause failed", err);
-    } finally {
-      setTogglingOffer(null);
+    } catch {
+      /* download without logo if fetch fails */
     }
-  }
 
-  async function handleCancel(offer: OfferDetail) {
-    if (!anchorWallet || !offer.qr_listings?.listing_pda) return;
-    setCancellingOffer(offer.id);
-    try {
-      await cancelListing(connection, anchorWallet, offer.qr_listings.listing_pda);
-    } catch (err) {
-      console.error("cancel failed", err);
-      setCancellingOffer(null);
-    }
-  }
-
-  async function handleDownloadQr(qrUrl: string, offerName: string) {
-    const response = await fetch(qrUrl);
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
+    const blob = new Blob([svg], { type: "image/svg+xml" });
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `${offerName}-qr.svg`;
+    a.href = URL.createObjectURL(blob);
+    a.download = `${offer.name}-qr.svg`;
     a.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
   }
 
   return (
@@ -140,81 +149,36 @@ export default function Dashboard() {
       </header>
 
       <main className="px-6 py-8 max-w-5xl mx-auto flex flex-col gap-6">
-        {/* Wallet banners — only relevant when the user has already registered */}
-        {registered && !connected && (
-          <div className="rounded-xl border border-yellow-200 bg-yellow-50 dark:border-yellow-800/40 dark:bg-yellow-900/20 px-5 py-4 text-sm text-yellow-800 dark:text-yellow-300">
-            Connect wallet{" "}
-            <span className="font-mono font-medium">{registeredWallet!}</span>{" "}
-            to access your offers.
-          </div>
-        )}
-        {registered && connected && !walletMatch && (
-          <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-900/20 px-5 py-4 text-sm text-red-800 dark:text-red-300">
-            Wrong wallet connected. Please connect wallet{" "}
-            <span className="font-mono font-medium">{registeredWallet!}</span>{" "}
-            to access your offers.
-          </div>
-        )}
-
-        {/* Products — only shown when wallet is connected */}
-        {!connected && !registered && (
+        {/* No wallet connected */}
+        {!anchorWallet && (
           <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 px-5 py-4 text-sm text-gray-500 dark:text-gray-400">
-            Connect your Phantom wallet to get started.
+            Connect your wallet to get started.
           </div>
         )}
-        {connected && (!registered || walletMatch) && <section className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-950 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-5">
-            Products
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {products.map((product) => (
-              <div
-                key={product.id}
-                className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-3 hover:shadow-md transition-shadow"
-              >
-                {product.image_url && (
-                  <div className="w-full aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
-                    <img
-                      src={product.image_url}
-                      alt={product.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-50 text-base">
-                    {product.name}
-                  </h3>
-                  {product.description && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      {product.description}
-                    </p>
-                  )}
-                </div>
-                {registered && walletMatch ? (
-                  <div className="w-full py-2 px-4 rounded-lg bg-green-600 text-white text-sm font-medium text-center">
-                    Registered
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => register()}
-                    disabled={!connected || registering}
-                    className="w-full py-2 px-4 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-                  >
-                    {registering
-                      ? "Registering…"
-                      : connected
-                        ? "Register"
-                        : "Connect wallet to register"}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>}
 
-        {/* QR Offers — only when registered AND correct wallet is connected */}
-        {registered && walletMatch && (
+        {/* Wallet connected but pending verification */}
+        {anchorWallet && !registered && (
+          <div className="rounded-xl border border-purple-200 bg-purple-50 dark:border-purple-800/40 dark:bg-purple-900/20 px-5 py-4 text-sm text-purple-800 dark:text-purple-300 flex items-center justify-between gap-4">
+            <span>
+              {registering
+                ? "Sign the message in your wallet to verify ownership…"
+                : registerError
+                  ? `Wallet verification failed: ${registerError}`
+                  : "Verifying wallet…"}
+            </span>
+            {registerError && !registering && (
+              <button
+                onClick={register}
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium transition-colors"
+              >
+                Try again
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* QR Offers — shown once wallet is verified */}
+        {registered && (
           <section className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-950 p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
@@ -227,6 +191,7 @@ export default function Dashboard() {
                 Create
               </button>
             </div>
+
             {offers.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 No offers yet. Create one to generate a QR code buyers can scan
@@ -250,7 +215,8 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                       {(offer.price_lamports / 1_000_000_000).toFixed(4)} SOL
                     </p>
-                    <div className="flex items-center gap-2">
+
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span
                         className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                           offer.status === "active"
@@ -266,48 +232,76 @@ export default function Dashboard() {
                       >
                         {offer.status}
                       </span>
-                      {(offer.status === "active" || offer.status === "paused") && offer.qr_listings?.listing_pda && (
+
+                      {(offer.status === "active" ||
+                        offer.status === "paused") && (
                         <>
                           <button
-                            onClick={() => handleTogglePause(offer)}
-                            disabled={togglingOffer === offer.id || (waitingOffer?.id === offer.id && offer.status !== waitingOffer.expectedStatus) || cancellingOffer === offer.id}
-                            className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            onClick={() =>
+                              offer.status === "active"
+                                ? handlePause(offer)
+                                : handleResume(offer)
+                            }
+                            disabled={togglingOffer?.id === offer.id}
+                            className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {offer.status === "active" ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
-                                <rect x="3" y="2" width="3.5" height="12" rx="1" />
-                                <rect x="9.5" y="2" width="3.5" height="12" rx="1" />
+                            {togglingOffer?.id === offer.id ? null : offer.status === "active" ? (
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 16 16"
+                                fill="currentColor"
+                                className="w-5 h-5"
+                              >
+                                <rect
+                                  x="3"
+                                  y="2"
+                                  width="3.5"
+                                  height="12"
+                                  rx="1"
+                                />
+                                <rect
+                                  x="9.5"
+                                  y="2"
+                                  width="3.5"
+                                  height="12"
+                                  rx="1"
+                                />
                               </svg>
                             ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 16 16"
+                                fill="currentColor"
+                                className="w-5 h-5"
+                              >
                                 <path d="M3 2.5a.5.5 0 0 1 .765-.424l10 5.5a.5.5 0 0 1 0 .848l-10 5.5A.5.5 0 0 1 3 13.5v-11z" />
                               </svg>
                             )}
                             <span className="text-xs">
-                              {togglingOffer === offer.id
-                                ? "Confirm in wallet…"
-                                : waitingOffer?.id === offer.id && offer.status !== waitingOffer.expectedStatus
-                                ? waitingOffer.label
-                                : offer.status === "active"
-                                ? "Pause offer"
-                                : "Resume offer"}
+                              {togglingOffer?.id === offer.id
+                                ? togglingOffer.label
+                                : offer.status === "active" ? "Pause" : "Resume"}
                             </span>
                           </button>
+
                           <button
                             onClick={() => handleCancel(offer)}
-                            disabled={cancellingOffer === offer.id || togglingOffer === offer.id}
-                            className="flex items-center gap-1.5 text-red-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            className="flex items-center gap-1.5 text-red-400 hover:text-red-600 transition-colors"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 16 16"
+                              fill="currentColor"
+                              className="w-5 h-5"
+                            >
                               <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22z" />
                             </svg>
-                            <span className="text-xs">
-                              {cancellingOffer === offer.id ? "Cancelling…" : "Cancel offer"}
-                            </span>
+                            <span className="text-xs">Cancel</span>
                           </button>
                         </>
                       )}
                     </div>
+
                     <div className="flex gap-2 mt-1">
                       <a
                         href={`/pay/${offer.id}`}
@@ -317,19 +311,12 @@ export default function Dashboard() {
                       >
                         View page
                       </a>
-                      {offer.qr_listings?.qr_url && (
-                        <button
-                          onClick={() =>
-                            handleDownloadQr(
-                              offer.qr_listings!.qr_url!,
-                              offer.name,
-                            )
-                          }
-                          className="flex-1 py-1.5 text-xs rounded-lg border border-purple-600 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
-                        >
-                          Download QR
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleDownloadQr(offer)}
+                        className="flex-1 py-1.5 text-xs rounded-lg border border-purple-600 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
+                      >
+                        Download QR
+                      </button>
                     </div>
                   </div>
                 ))}
