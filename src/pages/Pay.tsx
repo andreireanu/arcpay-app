@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   useAnchorWallet,
@@ -38,6 +38,8 @@ export default function Pay() {
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState(false);
   const [bought, setBought] = useState(false);
+  const [waitingConfirmation, setWaitingConfirmation] = useState(false);
+  const waitingConfirmationRef = useRef(false);
   const [buyError, setBuyError] = useState<string | null>(null);
 
   const anchorWallet = useAnchorWallet();
@@ -55,6 +57,11 @@ export default function Pay() {
       setOffer((prev) =>
         prev ? { ...prev, status: status as Offer["status"] } : prev,
       );
+      if (status === "sold" && waitingConfirmationRef.current) {
+        waitingConfirmationRef.current = false;
+        setWaitingConfirmation(false);
+        setBought(true);
+      }
     });
     return unsubscribe;
   }, [offerId]);
@@ -88,7 +95,8 @@ export default function Pay() {
     setBuying(true);
     try {
       await buy(connection, anchorWallet, offerId);
-      setBought(true);
+      waitingConfirmationRef.current = true;
+      setWaitingConfirmation(true);
     } catch (err) {
       setBuyError(err instanceof Error ? err.message : "Transaction failed");
     } finally {
@@ -125,7 +133,11 @@ export default function Pay() {
 
           {bought ? (
             <p className="text-sm text-green-600 dark:text-green-400 font-medium py-2">
-              Payment sent! The seller will confirm your order.
+              Payment sent!
+            </p>
+          ) : waitingConfirmation ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium py-2">
+              Transaction sent, waiting for on-chain confirmation…
             </p>
           ) : canBuy ? (
             <>
