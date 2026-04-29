@@ -54,8 +54,8 @@ Deno.serve(async (req) => {
   const buyerBytes = new PublicKey(buyer_wallet).toBytes();
   const sellerBytes = new PublicKey(offer.seller_wallet).toBytes();
   const offerIdBytes = uuidToBytes(offer_id);
-  const sellerAmount = BigInt(offer.price_lamports);
   const feeAmount = BigInt(Math.floor(offer.price_lamports * (offer.fee_bps ?? 0) / 10000));
+  const sellerAmount = BigInt(offer.price_lamports) - feeAmount;
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 120); // 2 minute window
 
   const sellerAmountBytes = new Uint8Array(8);
