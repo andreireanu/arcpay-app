@@ -95,63 +95,39 @@ export default function Dashboard() {
 
   async function handleDownloadQr(offer: Offer) {
     const url = `${window.location.origin}/pay/${offer.id}`;
-    const canvasSize = 500;
-    const margin = 20;
+    let svg: string = await QRCode.toString(url, {
+      type: "svg",
+      errorCorrectionLevel: "H",
+    });
 
-    const canvas = document.createElement("canvas");
-    canvas.width = canvasSize;
-    canvas.height = canvasSize;
-    const ctx = canvas.getContext("2d")!;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const qrData = (QRCode as any).create(url, { errorCorrectionLevel: "H" });
-    const { size: moduleCount, data: moduleData } = qrData.modules;
-    const qrAreaSize = canvasSize - margin * 2;
-    const moduleSize = qrAreaSize / moduleCount;
-
-    // Draw logo as full-canvas background
     try {
       const resp = await fetch("/favicon.svg");
       if (resp.ok) {
-        const logoBlob = new Blob([await resp.text()], {
-          type: "image/svg+xml",
-        });
-        const objUrl = URL.createObjectURL(logoBlob);
-        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const el = new Image();
-          el.onload = () => resolve(el);
-          el.onerror = reject;
-          el.src = objUrl;
-        });
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, canvasSize, canvasSize);
-        ctx.drawImage(img, margin, margin, qrAreaSize, qrAreaSize);
-        URL.revokeObjectURL(objUrl);
+        const b64 = btoa(await resp.text());
+        const logoData = `data:image/svg+xml;base64,${b64}`;
+        const match = svg.match(
+          /viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/,
+        );
+        if (match) {
+          const w = parseFloat(match[1]);
+          const h = parseFloat(match[2]);
+          const logoSize = Math.round(w * 0.22);
+          const x = Math.round((w - logoSize) / 2);
+          const y = Math.round((h - logoSize) / 2);
+          const overlay = `<image href="${logoData}" x="${x}" y="${y}" width="${logoSize}" height="${logoSize}"/>`;
+          svg = svg.replace("</svg>", `${overlay}</svg>`);
+        }
       }
     } catch {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvasSize, canvasSize);
+      /* download without logo if fetch fails */
     }
 
-    // Overlay QR modules on top of the logo
-    for (let row = 0; row < moduleCount; row++) {
-      for (let col = 0; col < moduleCount; col++) {
-        const isDark = moduleData[row * moduleCount + col] !== 0;
-        const x = margin + col * moduleSize;
-        const y = margin + row * moduleSize;
-        ctx.fillStyle = isDark ? "rgba(0,0,0,0.10)" : "rgba(255,255,255,0.72)";
-        ctx.fillRect(x, y, moduleSize, moduleSize);
-      }
-    }
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${offer.name}-qr.png`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${offer.name}-qr.svg`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
 
   return (
