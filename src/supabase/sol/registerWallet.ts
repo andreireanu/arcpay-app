@@ -8,7 +8,7 @@ export function buildRegisterMessage(wallet: string): string {
     "",
     "This request will not trigger a blockchain transaction or cost any gas fees.",
     "",
-    "Domain: arcpay.to",
+    "Domain: app.arcpay.to",
     `Wallet address: ${wallet}`,
   ].join("\n");
 }

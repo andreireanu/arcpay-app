@@ -16,7 +16,7 @@ function buildMessage(wallet: string): Uint8Array {
     "",
     "This request will not trigger a blockchain transaction or cost any gas fees.",
     "",
-    "Domain: arcpay.to",
+    "Domain: app.arcpay.to",
     `Wallet address: ${wallet}`,
   ].join("\n");
   return new TextEncoder().encode(text);
