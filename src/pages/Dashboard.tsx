@@ -17,13 +17,21 @@ import AddOfferModal from "../components/AddOfferModal";
 
 export default function Dashboard() {
   const { session, signOutUser } = useAuth();
-  const { register, registering, registered, error: registerError } = useRegister();
+  const {
+    register,
+    registering,
+    registered,
+    error: registerError,
+  } = useRegister();
   const { createListing, creating } = useCreateListing();
   const anchorWallet = useAnchorWallet();
   const walletAddress = anchorWallet?.publicKey?.toBase58();
   const [offers, setOffers] = useState<Offer[]>([]);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
-  const [togglingOffer, setTogglingOffer] = useState<{ id: string; label: string } | null>(null);
+  const [togglingOffer, setTogglingOffer] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!registered || !walletAddress) return;
@@ -87,43 +95,63 @@ export default function Dashboard() {
 
   async function handleDownloadQr(offer: Offer) {
     const url = `${window.location.origin}/pay/${offer.id}`;
-    let svg: string = await QRCode.toString(url, {
-      type: "svg",
-      errorCorrectionLevel: "H",
-    });
+    const canvasSize = 500;
+    const margin = 20;
 
+    const canvas = document.createElement("canvas");
+    canvas.width = canvasSize;
+    canvas.height = canvasSize;
+    const ctx = canvas.getContext("2d")!;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const qrData = (QRCode as any).create(url, { errorCorrectionLevel: "H" });
+    const { size: moduleCount, data: moduleData } = qrData.modules;
+    const qrAreaSize = canvasSize - margin * 2;
+    const moduleSize = qrAreaSize / moduleCount;
+
+    // Draw logo as full-canvas background
     try {
       const resp = await fetch("/favicon.svg");
       if (resp.ok) {
-        const b64 = btoa(await resp.text());
-        const logoData = `data:image/svg+xml;base64,${b64}`;
-        const match = svg.match(
-          /viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/,
-        );
-        if (match) {
-          const w = parseFloat(match[1]);
-          const h = parseFloat(match[2]);
-          const logoSize = Math.round(w * 0.22);
-          const pad = 3;
-          const x = Math.round((w - logoSize) / 2);
-          const y = Math.round((h - logoSize) / 2);
-          const overlay = [
-            `<rect x="${x - pad}" y="${y - pad}" width="${logoSize + pad * 2}" height="${logoSize + pad * 2}" fill="white" rx="${pad}"/>`,
-            `<image href="${logoData}" x="${x}" y="${y}" width="${logoSize}" height="${logoSize}"/>`,
-          ].join("");
-          svg = svg.replace("</svg>", `${overlay}</svg>`);
-        }
+        const logoBlob = new Blob([await resp.text()], {
+          type: "image/svg+xml",
+        });
+        const objUrl = URL.createObjectURL(logoBlob);
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const el = new Image();
+          el.onload = () => resolve(el);
+          el.onerror = reject;
+          el.src = objUrl;
+        });
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvasSize, canvasSize);
+        ctx.drawImage(img, margin, margin, qrAreaSize, qrAreaSize);
+        URL.revokeObjectURL(objUrl);
       }
     } catch {
-      /* download without logo if fetch fails */
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvasSize, canvasSize);
     }
 
-    const blob = new Blob([svg], { type: "image/svg+xml" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${offer.name}-qr.svg`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    // Overlay QR modules on top of the logo
+    for (let row = 0; row < moduleCount; row++) {
+      for (let col = 0; col < moduleCount; col++) {
+        const isDark = moduleData[row * moduleCount + col] !== 0;
+        const x = margin + col * moduleSize;
+        const y = margin + row * moduleSize;
+        ctx.fillStyle = isDark ? "rgba(0,0,0,0.10)" : "rgba(255,255,255,0.72)";
+        ctx.fillRect(x, y, moduleSize, moduleSize);
+      }
+    }
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${offer.name}-qr.png`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
   }
 
   return (
@@ -245,7 +273,8 @@ export default function Dashboard() {
                             disabled={togglingOffer?.id === offer.id}
                             className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {togglingOffer?.id === offer.id ? null : offer.status === "active" ? (
+                            {togglingOffer?.id ===
+                            offer.id ? null : offer.status === "active" ? (
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 viewBox="0 0 16 16"
@@ -280,7 +309,9 @@ export default function Dashboard() {
                             <span className="text-xs">
                               {togglingOffer?.id === offer.id
                                 ? togglingOffer.label
-                                : offer.status === "active" ? "Pause" : "Resume"}
+                                : offer.status === "active"
+                                  ? "Pause"
+                                  : "Resume"}
                             </span>
                           </button>
 
