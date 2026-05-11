@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react"
+import { useState } from 'react'
+import s from '../styles/dashboard.module.css'
 
 interface Props {
   open: boolean
@@ -8,65 +9,46 @@ interface Props {
 }
 
 export default function AddOfferModal({ open, onClose, onSubmit, creating }: Props) {
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [price, setPrice] = useState("")
-
-  useEffect(() => {
-    if (!open) {
-      setName("")
-      setDescription("")
-      setPrice("")
-    }
-  }, [open])
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [price, setPrice] = useState('')
 
   if (!open) return null
 
   function handleClose() {
-    setName("")
-    setDescription("")
-    setPrice("")
     onClose()
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md bg-white dark:bg-gray-950 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 mx-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-5">
-          New offer
-        </h2>
+  const canSubmit = name.length >= 3 && description.length >= 3 && !!price && !creating
 
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Name
-            </label>
+  return (
+    <div className={s.modalOverlay}>
+      <div className={s.modal}>
+        <h2 className={s.modalTitle}>New offer</h2>
+
+        <div className={s.modalFields}>
+          <div className={s.modalField}>
+            <label className={s.modalLabel}>Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Vintage camera"
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className={s.modalInput}
             />
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Description
-            </label>
+          <div className={s.modalField}>
+            <label className={s.modalLabel}>Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe your item…"
               rows={3}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              className={s.modalTextarea}
             />
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Price (SOL)
-            </label>
+          <div className={s.modalField}>
+            <label className={s.modalLabel}>Price (SOL)</label>
             <input
               type="number"
               value={price}
@@ -74,22 +56,21 @@ export default function AddOfferModal({ open, onClose, onSubmit, creating }: Pro
               placeholder="0.00"
               min="0"
               step="0.01"
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 text-sm placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className={s.modalInput}
             />
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={handleClose}
-            className="flex-1 py-2 px-4 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
+        <div className={s.modalActions}>
+          <button className={s.modalCancelButton} onClick={handleClose}>
             Cancel
           </button>
           <button
-            onClick={() => onSubmit(name, description, Math.round(parseFloat(price) * 1_000_000_000))}
-            disabled={name.length < 3 || description.length < 3 || !price || creating}
-            className="flex-1 py-2 px-4 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+            className={s.modalSubmitButton}
+            disabled={!canSubmit}
+            onClick={() =>
+              onSubmit(name, description, Math.round(parseFloat(price) * 1_000_000_000))
+            }
           >
             {creating ? 'Creating…' : 'Create'}
           </button>

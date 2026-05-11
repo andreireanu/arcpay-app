@@ -1,170 +1,141 @@
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import {
-  useAnchorWallet,
-  useConnection,
-  useWallet,
-} from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { getOffer, watchOfferStatus } from "../supabase/offers/offers";
-import { buy } from "../solana/instructions/buy";
-import type { Offer } from "../types/offer";
-
-const statusConfig: Record<string, { label: string; className: string }> = {
-  active: {
-    label: "Active",
-    className:
-      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  },
-  paused: {
-    label: "Paused",
-    className:
-      "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  },
-  canceled: {
-    label: "Canceled",
-    className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  },
-  sold: {
-    label: "Sold",
-    className:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  },
-};
+import { useEffect, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { useAnchorWallet, useConnection, useWallet } from '@solana/wallet-adapter-react'
+import { useWalletModal } from '@solana/wallet-adapter-react-ui'
+import { getOffer, watchOfferStatus } from '../supabase/offers/offers'
+import { buy } from '../solana/instructions/buy'
+import type { Offer } from '../types/offer'
+import s from '../styles/pay.module.css'
 
 export default function Pay() {
-  const { offerId } = useParams<{ offerId: string }>();
-  const [offer, setOffer] = useState<Offer | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [buying, setBuying] = useState(false);
-  const [bought, setBought] = useState(false);
-  const [waitingConfirmation, setWaitingConfirmation] = useState(false);
-  const waitingConfirmationRef = useRef(false);
-  const [buyError, setBuyError] = useState<string | null>(null);
+  const { offerId } = useParams<{ offerId: string }>()
+  const [offer, setOffer] = useState<Offer | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [buying, setBuying] = useState(false)
+  const [bought, setBought] = useState(false)
+  const [waitingConfirmation, setWaitingConfirmation] = useState(false)
+  const waitingConfirmationRef = useRef(false)
+  const [buyError, setBuyError] = useState<string | null>(null)
 
-  const anchorWallet = useAnchorWallet();
-  const { connected } = useWallet();
-  const { connection } = useConnection();
+  const anchorWallet = useAnchorWallet()
+  const { connected } = useWallet()
+  const { connection } = useConnection()
+  const { setVisible: openWalletModal } = useWalletModal()
 
   useEffect(() => {
-    if (!offerId) return;
+    if (!offerId) return
     getOffer(offerId)
       .then(setOffer)
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => setLoading(false))
 
     const unsubscribe = watchOfferStatus(offerId, (status) => {
-      setOffer((prev) =>
-        prev ? { ...prev, status: status as Offer["status"] } : prev,
-      );
-      if (status === "sold" && waitingConfirmationRef.current) {
-        waitingConfirmationRef.current = false;
-        setWaitingConfirmation(false);
-        setBought(true);
+      setOffer((prev) => (prev ? { ...prev, status: status as Offer['status'] } : prev))
+      if (status === 'sold' && waitingConfirmationRef.current) {
+        waitingConfirmationRef.current = false
+        setWaitingConfirmation(false)
+        setBought(true)
       }
-    });
-    return unsubscribe;
-  }, [offerId]);
+    })
+    return unsubscribe
+  }, [offerId])
+
+  async function handleBuy() {
+    if (!anchorWallet || !connected || !offerId) return
+    setBuyError(null)
+    setBuying(true)
+    try {
+      await buy(connection, anchorWallet, offerId)
+      waitingConfirmationRef.current = true
+      setWaitingConfirmation(true)
+    } catch (err) {
+      setBuyError(err instanceof Error ? err.message : 'Transaction failed')
+    } finally {
+      setBuying(false)
+    }
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <p className="text-sm text-gray-400">Loading…</p>
+      <div className={s.page}>
+        <div className={s.card}>
+          <div className={s.logoWrap}>
+            <img src="/favicon.svg" alt="ArcPay" className={s.logo} />
+          </div>
+          <p className={s.statusMessage}>Loading…</p>
+        </div>
       </div>
-    );
+    )
   }
 
   if (!offer) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <p className="text-sm text-gray-400">Offer not found.</p>
+      <div className={s.page}>
+        <div className={s.card}>
+          <div className={s.logoWrap}>
+            <img src="/favicon.svg" alt="ArcPay" className={s.logo} />
+          </div>
+          <p className={s.statusMessage}>Offer not found.</p>
+        </div>
       </div>
-    );
+    )
   }
 
-  const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
-  const { label: statusLabel, className: statusClass } = statusConfig[offer.status] ?? {
-    label: offer.status,
-    className: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-  };
-  const canBuy = offer.status === "active" && !bought;
+  const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4)
+  const canBuy = offer.status === 'active' && !bought
 
-  async function handleBuy() {
-    if (!anchorWallet || !connected || !offerId) return;
-    setBuyError(null);
-    setBuying(true);
-    try {
-      await buy(connection, anchorWallet, offerId);
-      waitingConfirmationRef.current = true;
-      setWaitingConfirmation(true);
-    } catch (err) {
-      setBuyError(err instanceof Error ? err.message : "Transaction failed");
-    } finally {
-      setBuying(false);
-    }
+  function unavailableClass() {
+    if (offer!.status === 'paused') return s.unavailablePaused
+    if (offer!.status === 'canceled') return s.unavailableCanceled
+    if (offer!.status === 'sold') return s.unavailableSold
+    return ''
+  }
+
+  function unavailableLabel() {
+    if (offer!.status === 'paused') return 'This listing is currently paused.'
+    if (offer!.status === 'canceled') return 'This listing has been canceled.'
+    if (offer!.status === 'sold') return 'This item has already been sold.'
+    return `This listing is ${offer!.status}.`
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="w-full aspect-square rounded-t-2xl bg-gray-100 dark:bg-gray-800" />
+    <div className={s.page}>
+      <div className={s.card}>
+        <div className={s.logoWrap}>
+          <img src="/favicon.svg" alt="ArcPay" className={s.logo} />
+        </div>
 
-        <div className="bg-white dark:bg-gray-950 rounded-b-2xl border border-t-0 border-gray-200 dark:border-gray-700 px-5 py-6 flex flex-col gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-purple-600 uppercase leading-tight tracking-tight">
-              {offer.name}
-            </h1>
-            <p className="text-xl font-bold text-gray-900 dark:text-gray-50 mt-2">
-              {priceSOL} <span className="text-base font-semibold">SOL</span>
-            </p>
-          </div>
-
+        <div className={s.info}>
+          <h1 className={s.name}>{offer.name}</h1>
+          <p className={s.price}>{priceSOL} SOL</p>
           {offer.description && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-              {offer.description}
-            </p>
-          )}
-
-          {offer.status !== "active" && (
-            <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${statusClass}`}>
-              {statusLabel}
-            </span>
-          )}
-
-          {bought ? (
-            <p className="text-sm text-green-600 dark:text-green-400 font-medium py-2">
-              Payment sent!
-            </p>
-          ) : waitingConfirmation ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium py-2">
-              Transaction sent, waiting for on-chain confirmation…
-            </p>
-          ) : canBuy ? (
-            <>
-              {connected ? (
-                <button
-                  onClick={handleBuy}
-                  disabled={buying}
-                  className="w-full py-3 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors mt-1"
-                >
-                  {buying ? "Confirm in wallet…" : "Buy"}
-                </button>
-              ) : (
-                <WalletMultiButton style={{ width: "100%", justifyContent: "center" }} />
-              )}
-              {buyError && (
-                <p className="text-xs text-red-500 mt-1">{buyError}</p>
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-gray-400 dark:text-gray-500 py-2">
-              {offer.status === "sold"
-                ? "This item has already been sold."
-                : `This listing is currently ${offer.status}.`}
-            </p>
+            <p className={s.description}>{offer.description}</p>
           )}
         </div>
+
+        {bought ? (
+          <p className={s.successMessage}>Payment confirmed!</p>
+        ) : waitingConfirmation ? (
+          <p className={s.statusMessage}>Transaction sent, waiting for confirmation…</p>
+        ) : canBuy ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {connected ? (
+              <button className={s.buyButton} onClick={handleBuy} disabled={buying}>
+                {buying ? 'Confirm in wallet…' : 'BUY'}
+              </button>
+            ) : (
+              <button className={s.connectButton} onClick={() => openWalletModal(true)}>
+                Connect wallet
+              </button>
+            )}
+            {buyError && <p className={s.errorMessage}>{buyError}</p>}
+          </div>
+        ) : (
+          <span className={`${s.unavailableBadge} ${unavailableClass()}`}>
+            {unavailableLabel()}
+          </span>
+        )}
       </div>
     </div>
-  );
+  )
 }

@@ -1,0 +1,156 @@
+.page {
+  min-height: 100svh;
+  background: var(--color-black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.card {
+  background: var(--color-surface);
+  border-radius: 32px;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.logoWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.logo {
+  height: 48px;
+  width: auto;
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.name {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: -0.4px;
+  color: var(--color-white);
+  text-align: center;
+}
+
+.price {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 36px;
+  letter-spacing: -0.5px;
+  color: var(--color-white);
+  text-align: center;
+}
+
+.description {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.buyButton {
+  background: var(--color-yellow);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 14px 20px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-black);
+  width: 100%;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.buyButton:hover {
+  opacity: 0.88;
+}
+
+.buyButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.connectButton {
+  background: var(--color-yellow);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 14px 20px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-black);
+  width: 100%;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.connectButton:hover {
+  opacity: 0.88;
+}
+
+.statusMessage {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.successMessage {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 20px;
+  color: #00b54b;
+  text-align: center;
+}
+
+.errorMessage {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--color-error);
+  text-align: center;
+}
+
+.unavailableBadge {
+  align-self: center;
+  border-radius: var(--radius-pill);
+  padding: 5px 14px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.unavailablePaused {
+  background: #2b2000;
+  color: #f59e0b;
+}
+
+.unavailableCanceled {
+  background: #2d0a0a;
+  color: #f04438;
+}
+
+.unavailableSold {
+  background: #0a1628;
+  color: #3b82f6;
+}
