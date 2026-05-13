@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
 
       const offerId = bytesToUuid(bytes.slice(8, 24));
       const buyerWallet = new PublicKey(bytes.slice(24, 56)).toBase58();
-      const sellerWallet = new PublicKey(bytes.slice(56, 88)).toBase58();
+      // bytes 56–88 are the seller wallet (skipped — derivable from qr_offers)
       const sellerAmount = Number(new DataView(bytes.buffer, bytes.byteOffset + 88, 8).getBigUint64(0, true));
       const feeAmount = Number(new DataView(bytes.buffer, bytes.byteOffset + 96, 8).getBigUint64(0, true));
 
@@ -62,18 +62,18 @@ Deno.serve(async (req) => {
         .insert({
           offer_id: offerId,
           buyer_wallet: buyerWallet,
-          seller_wallet: sellerWallet,
           tx_signature: txSignature,
           seller_amount: sellerAmount,
           fee_amount: feeAmount,
+          quantity: 1,
         });
       if (txError) console.error("transaction insert error", txError);
 
-      const { error: statusError } = await supabase
-        .from("qr_offers")
-        .update({ status: "sold" })
-        .eq("id", offerId);
-      if (statusError) console.error("status update error", statusError);
+      const { error: qtyError } = await supabase.rpc(
+        "increment_offer_quantity_sold",
+        { p_offer_id: offerId },
+      );
+      if (qtyError) console.error("quantity increment error", qtyError);
     }
   }
 

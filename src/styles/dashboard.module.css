@@ -241,6 +241,13 @@
   color: var(--color-white);
 }
 
+.offerQuantity {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-muted);
+}
+
 .offerCardRight {
   display: flex;
   flex-direction: column;

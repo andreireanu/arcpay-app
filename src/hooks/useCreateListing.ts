@@ -16,6 +16,7 @@ export function useCreateListing() {
     name: string,
     description: string,
     priceLamports: number,
+    quantity: number,
   ): Promise<Offer | null> {
     if (!anchorWallet || !connected) return null
 
@@ -29,6 +30,7 @@ export function useCreateListing() {
         description,
         priceLamports,
         product.fee_bps,
+        quantity,
       )
       return offer
     } catch (err) {

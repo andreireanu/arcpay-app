@@ -61,10 +61,8 @@ export default function Dashboard() {
   const offerIds = offers.map((o) => o.id)
   useEffect(() => {
     if (offerIds.length === 0) return
-    return watchOfferStatuses(offerIds, (offerId, status) => {
-      setOffers((prev) =>
-        prev.map((o) => (o.id === offerId ? { ...o, status: status as Offer['status'] } : o)),
-      )
+    return watchOfferStatuses(offerIds, (offerId, update) => {
+      setOffers((prev) => prev.map((o) => (o.id === offerId ? { ...o, ...update } : o)))
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offerIds.join(',')])
@@ -74,8 +72,8 @@ export default function Dashboard() {
     window.location.href = '/login'
   }
 
-  async function handleCreateOffer(name: string, description: string, priceLamports: number) {
-    const offer = await createListing(name, description, priceLamports)
+  async function handleCreateOffer(name: string, description: string, priceLamports: number, quantity: number) {
+    const offer = await createListing(name, description, priceLamports, quantity)
     if (offer) {
       setOffers((prev) => [offer, ...prev])
       setOfferModalOpen(false)
@@ -209,6 +207,9 @@ export default function Dashboard() {
                         </div>
                         <p className={s.offerPrice}>
                           {(offer.price_lamports / 1_000_000_000).toFixed(4)} SOL
+                        </p>
+                        <p className={s.offerQuantity}>
+                          {offer.quantity - offer.quantity_sold} of {offer.quantity} remaining
                         </p>
                       </div>
                       <div className={s.offerCardRight}>

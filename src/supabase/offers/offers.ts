@@ -7,10 +7,11 @@ export async function insertOffer(
   description: string,
   priceLamports: number,
   feeBps: number,
+  quantity: number,
 ): Promise<Offer> {
   const { data: offer, error } = await supabase
     .from('qr_offers')
-    .insert({ name, description, price_lamports: priceLamports, seller_wallet: sellerWallet, fee_bps: feeBps })
+    .insert({ name, description, price_lamports: priceLamports, seller_wallet: sellerWallet, fee_bps: feeBps, quantity })
     .select()
     .single()
   if (error) throw error
@@ -69,7 +70,7 @@ export async function cancelOffer(offerId: string): Promise<void> {
 
 export function watchOfferStatuses(
   offerIds: string[],
-  onUpdate: (offerId: string, status: string) => void,
+  onUpdate: (offerId: string, update: Partial<Offer>) => void,
 ): () => void {
   if (offerIds.length === 0) return () => {}
 
@@ -80,8 +81,11 @@ export function watchOfferStatuses(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'qr_offers', filter: `id=eq.${id}` },
         (payload) => {
-          const status = (payload.new as { status?: string }).status
-          if (status) onUpdate(id, status)
+          const row = payload.new as Partial<Offer>
+          const update: Partial<Offer> = {}
+          if (row.status !== undefined) update.status = row.status
+          if (row.quantity_sold !== undefined) update.quantity_sold = row.quantity_sold
+          if (Object.keys(update).length > 0) onUpdate(id, update)
         },
       )
       .subscribe(),
