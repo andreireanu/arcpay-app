@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSolanaWallets } from '@privy-io/react-auth/solana'
+import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
 import QRCode from 'qrcode'
 import { useAuth } from '../hooks/useAuth'
 import {
@@ -44,8 +44,8 @@ function CloseIcon() {
 
 export default function Dashboard() {
   const { signOutUser } = useAuth()
-  const { wallets } = useSolanaWallets()
-  const walletAddress = wallets[0]?.address
+  const { primaryWallet } = useDynamicContext()
+  const walletAddress = primaryWallet?.address
   const [offers, setOffers] = useState<Offer[]>([])
   const [offerModalOpen, setOfferModalOpen] = useState(false)
   const [togglingOffer, setTogglingOffer] = useState<string | null>(null)

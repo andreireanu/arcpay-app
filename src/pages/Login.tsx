@@ -1,38 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
-import { useSolanaWallets } from '@privy-io/react-auth/solana'
+import { useDynamicContext, getAuthToken } from '@dynamic-labs/sdk-react-core'
 import { useNavigate } from 'react-router-dom'
 import { exchangeToken } from '../supabase/auth/exchangeToken'
 import s from '../styles/auth.module.css'
 
 export default function Login() {
-  const { ready, authenticated, login, logout, getAccessToken } = usePrivy()
-  const { wallets } = useSolanaWallets()
+  const { sdkHasLoaded, user, setShowAuthFlow, handleLogOut, primaryWallet } = useDynamicContext()
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
   const exchangingRef = useRef(false)
 
-  const solanaWallet = wallets[0]
-  const walletAddress = solanaWallet?.address
+  const walletAddress = primaryWallet?.address
 
   useEffect(() => {
-    if (!authenticated || !walletAddress || exchangingRef.current) return
+    const token = getAuthToken()
+    if (!user || !walletAddress || !token || exchangingRef.current) return
     exchangingRef.current = true
-    getAccessToken()
-      .then((token) => {
-        if (!token) throw new Error('No access token')
-        return exchangeToken(token, walletAddress)
-      })
+    exchangeToken(token, walletAddress)
       .then(() => navigate('/dashboard'))
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Login failed')
         exchangingRef.current = false
-        logout()
+        handleLogOut()
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated, walletAddress])
+  }, [user, walletAddress])
 
-  const loading = !ready || (authenticated && !error)
+  const loading = !sdkHasLoaded || (!!user && !!walletAddress && !error)
 
   return (
     <div className={s.page}>
@@ -47,7 +41,7 @@ export default function Login() {
 
         <button
           className={s.primaryButton}
-          onClick={login}
+          onClick={() => setShowAuthFlow(true)}
           disabled={loading}
         >
           {loading ? 'Signing in…' : 'Connect wallet'}

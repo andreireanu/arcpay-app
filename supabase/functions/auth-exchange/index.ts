@@ -11,12 +11,12 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // 1. Extract Privy token from Authorization header
+  // 1. Extract Dynamic token from Authorization header
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return new Response("Missing authorization header", { status: 401, headers: corsHeaders });
   }
-  const privyToken = authHeader.slice(7);
+  const dynamicToken = authHeader.slice(7);
 
   // 2. Extract wallet address from request body
   const { wallet_address: walletAddress } = await req.json();
@@ -24,20 +24,19 @@ Deno.serve(async (req) => {
     return new Response("Missing wallet_address", { status: 400, headers: corsHeaders });
   }
 
-  const privyAppId = Deno.env.get("PRIVY_ID")!;
+  const dynamicEnvId = Deno.env.get("DYNAMIC_ENV_ID")!;
 
-  // 3. Verify the Privy token via JWKS
+  // 3. Verify the Dynamic token via JWKS
   try {
     const JWKS = jose.createRemoteJWKSet(
-      new URL(`https://auth.privy.io/api/v1/apps/${privyAppId}/jwks.json`),
+      new URL(`https://app.dynamic.xyz/api/v0/sdk/${dynamicEnvId}/.well-known/jwks`),
     );
-    await jose.jwtVerify(privyToken, JWKS, {
-      issuer: "privy.io",
-      audience: privyAppId,
+    await jose.jwtVerify(dynamicToken, JWKS, {
+      issuer: "app.dynamic.xyz",
     });
   } catch (err) {
-    console.error("Privy token verification failed", err);
-    return new Response("Invalid Privy token", { status: 401, headers: corsHeaders });
+    console.error("Dynamic token verification failed", err);
+    return new Response("Invalid Dynamic token", { status: 401, headers: corsHeaders });
   }
 
   const supabase = createClient(
@@ -48,45 +47,36 @@ Deno.serve(async (req) => {
   // 4. Find or create a Supabase auth user keyed by wallet address
   const internalEmail = `${walletAddress}@wallet.arcpay`;
 
-  // sellers row holds the stable wallet→user_id mapping after first login
-  const { data: sellerRow } = await supabase
-    .from("sellers")
-    .select("user_id")
-    .eq("wallet_address", walletAddress)
-    .single();
+  // Try generateLink first — works if user already exists
+  let { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+    type: "magiclink",
+    email: internalEmail,
+  });
 
-  let userId: string;
-  if (sellerRow?.user_id) {
-    userId = sellerRow.user_id;
-  } else {
-    const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+  if (linkError) {
+    // User doesn't exist yet — create them
+    const { error: createError } = await supabase.auth.admin.createUser({
       email: internalEmail,
       email_confirm: true,
       user_metadata: { wallet_address: walletAddress },
     });
-    if (createError || !newUser.user) {
+    if (createError) {
       console.error("Failed to create Supabase user", createError);
       return new Response("Failed to create user", { status: 500, headers: corsHeaders });
     }
-    userId = newUser.user.id;
+
+    ({ data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: "magiclink",
+      email: internalEmail,
+    }));
   }
 
-  // 5. Upsert sellers row
-  await supabase.from("sellers").upsert(
-    { wallet_address: walletAddress, user_id: userId },
-    { onConflict: "wallet_address" },
-  );
-
-  // 6. Create a Supabase session for this user
-  const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-    type: "magiclink",
-    email: internalEmail,
-  });
   if (linkError || !linkData) {
     console.error("Failed to generate session link", linkError);
     return new Response("Failed to create session", { status: 500, headers: corsHeaders });
   }
 
+  // 5. Exchange the magic link token for a real session
   const { data: sessionData, error: sessionError } = await supabase.auth.verifyOtp({
     token_hash: linkData.properties.hashed_token,
     type: "magiclink",

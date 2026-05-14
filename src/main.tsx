@@ -4,32 +4,23 @@ import { Buffer } from 'buffer/'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
-import { PrivyProvider } from '@privy-io/react-auth'
-import { toSolanaWalletConnectors } from '@privy-io/react-auth/solana'
+import { DynamicContextProvider } from '@dynamic-labs/sdk-react-core'
+import { SolanaWalletConnectors } from '@dynamic-labs/solana'
+import { DynamicWaasSVMConnectors } from '@dynamic-labs/waas-svm'
 import { ConnectionProvider } from '@solana/wallet-adapter-react'
 import { AuthContextProvider } from './context/AuthContext'
 import { config } from './config/env'
 import { router } from './router'
 import './index.css'
 
-const solanaConnectors = toSolanaWalletConnectors({ shouldAutoConnect: true })
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <PrivyProvider
-      appId={config.privy.appId}
-      config={{
-        loginMethods: ['wallet', 'email'],
-        appearance: {
-          theme: 'dark',
-          accentColor: '#ffffff',
-          logo: `${window.location.origin}/favicon.svg`,
-          walletList: ['phantom', 'detected_solana_wallets'],
-        },
-        embeddedWallets: {
-          solana: { createOnLogin: 'users-without-wallets' },
-        },
-        externalWallets: { solana: { connectors: solanaConnectors } },
+    <DynamicContextProvider
+      settings={{
+        environmentId: config.dynamic.environmentId,
+        walletConnectors: [SolanaWalletConnectors, DynamicWaasSVMConnectors],
+        walletsFilter: (wallets) =>
+          wallets.filter((w) => w.key === 'phantom' || w.key === 'turnkeyhd' || w.key === 'dynamicwaas'),
       }}
     >
       <ConnectionProvider endpoint={config.solana.rpcUrl}>
@@ -37,6 +28,6 @@ createRoot(document.getElementById('root')!).render(
           <RouterProvider router={router} />
         </AuthContextProvider>
       </ConnectionProvider>
-    </PrivyProvider>
+    </DynamicContextProvider>
   </StrictMode>,
 )

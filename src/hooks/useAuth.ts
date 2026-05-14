@@ -1,10 +1,10 @@
-import { usePrivy } from '@privy-io/react-auth'
+import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
 
 export function useAuth() {
-  const { ready, authenticated, logout } = usePrivy()
+  const { sdkHasLoaded, user, handleLogOut } = useDynamicContext()
   return {
-    loading: !ready,
-    authenticated,
-    signOutUser: logout,
+    loading: !sdkHasLoaded,
+    authenticated: !!user,
+    signOutUser: handleLogOut,
   }
 }
