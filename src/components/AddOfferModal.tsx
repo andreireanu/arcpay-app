@@ -1,27 +1,37 @@
-import { useState } from 'react'
-import s from '../styles/dashboard.module.css'
+import { useState } from "react";
+import s from "../styles/dashboard.module.css";
 
 interface Props {
-  open: boolean
-  onClose: () => void
-  onSubmit: (name: string, description: string, priceLamports: number, quantity: number) => void
-  creating: boolean
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (
+    name: string,
+    description: string,
+    priceLamports: number,
+    quantity: number,
+  ) => void;
+  creating: boolean;
 }
 
-export default function AddOfferModal({ open, onClose, onSubmit, creating }: Props) {
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [price, setPrice] = useState('')
-  const [quantity, setQuantity] = useState('1')
+export default function AddOfferModal({
+  open,
+  onClose,
+  onSubmit,
+  creating,
+}: Props) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
+  const [quantity, setQuantity] = useState("1");
 
-  if (!open) return null
+  if (!open) return null;
 
   const canSubmit =
     name.length >= 3 &&
     description.length >= 3 &&
     !!price &&
     parseInt(quantity) >= 1 &&
-    !creating
+    !creating;
 
   return (
     <div className={s.modalOverlay}>
@@ -50,7 +60,7 @@ export default function AddOfferModal({ open, onClose, onSubmit, creating }: Pro
             />
           </div>
           <div className={s.modalField}>
-            <label className={s.modalLabel}>Price (SOL)</label>
+            <label className={s.modalLabel}>Price per unit (SOL)</label>
             <input
               type="number"
               value={price}
@@ -91,10 +101,10 @@ export default function AddOfferModal({ open, onClose, onSubmit, creating }: Pro
               )
             }
           >
-            {creating ? 'Creating…' : 'Create'}
+            {creating ? "Creating…" : "Create"}
           </button>
         </div>
       </div>
     </div>
-  )
+  );
 }

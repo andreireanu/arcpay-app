@@ -10,6 +10,7 @@ import {
   cancelOffer,
   watchOfferStatuses,
 } from '../supabase/offers/offers'
+import { registerSellerIfNew } from '../supabase/sellers/sellers'
 import { getProduct } from '../supabase/products/products'
 import type { Offer } from '../types/offer'
 import AddOfferModal from '../components/AddOfferModal'
@@ -74,6 +75,7 @@ export default function Dashboard() {
     if (!walletAddress) return
     setCreating(true)
     try {
+      await registerSellerIfNew(walletAddress)
       const product = await getProduct(QR_PRODUCT_ID)
       const offer = await insertOffer(walletAddress, name, description, priceLamports, product.fee_bps, quantity)
       setOffers((prev) => [offer, ...prev])
