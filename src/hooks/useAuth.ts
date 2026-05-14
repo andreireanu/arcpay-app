@@ -1,8 +1,10 @@
-import { useContext } from 'react'
-import { AuthContext } from '../context/AuthContext'
+import { usePrivy } from '@privy-io/react-auth'
 
 export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthContextProvider')
-  return ctx
+  const { ready, authenticated, logout } = usePrivy()
+  return {
+    loading: !ready,
+    authenticated,
+    signOutUser: logout,
+  }
 }

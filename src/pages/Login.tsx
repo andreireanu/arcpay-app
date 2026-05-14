@@ -1,23 +1,38 @@
-import { useActionState } from "react";
-import { useAuth } from "../hooks/useAuth";
-import { useNavigate, Link } from "react-router-dom";
-import s from "../styles/auth.module.css";
+import { useEffect, useRef, useState } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
+import { useSolanaWallets } from '@privy-io/react-auth/solana'
+import { useNavigate } from 'react-router-dom'
+import { exchangeToken } from '../supabase/auth/exchangeToken'
+import s from '../styles/auth.module.css'
 
 export default function Login() {
-  const { signInUser } = useAuth();
-  const navigate = useNavigate();
+  const { ready, authenticated, login, logout, getAccessToken } = usePrivy()
+  const { wallets } = useSolanaWallets()
+  const navigate = useNavigate()
+  const [error, setError] = useState<string | null>(null)
+  const exchangingRef = useRef(false)
 
-  const [error, submitAction, isPending] = useActionState(
-    async (_prev: string | null, formData: FormData) => {
-      const email = formData.get("email") as string;
-      const password = formData.get("password") as string;
-      const { success, error } = await signInUser(email, password);
-      if (!success && error) return error;
-      navigate("/dashboard");
-      return null;
-    },
-    null,
-  );
+  const solanaWallet = wallets[0]
+  const walletAddress = solanaWallet?.address
+
+  useEffect(() => {
+    if (!authenticated || !walletAddress || exchangingRef.current) return
+    exchangingRef.current = true
+    getAccessToken()
+      .then((token) => {
+        if (!token) throw new Error('No access token')
+        return exchangeToken(token, walletAddress)
+      })
+      .then(() => navigate('/dashboard'))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Login failed')
+        exchangingRef.current = false
+        logout()
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, walletAddress])
+
+  const loading = !ready || (authenticated && !error)
 
   return (
     <div className={s.page}>
@@ -28,45 +43,16 @@ export default function Login() {
 
         <h1 className={s.heading}>Sign in</h1>
 
-        <form action={submitAction} className={s.form}>
-          <div className={s.fields}>
-            <div className={s.field}>
-              <label htmlFor="email" className={s.label}>Email</label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                required
-                disabled={isPending}
-                className={s.input}
-              />
-            </div>
-            <div className={s.field}>
-              <label htmlFor="password" className={s.label}>Password</label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                required
-                disabled={isPending}
-                className={s.input}
-              />
-            </div>
-          </div>
+        {error && <p role="alert" className={s.error}>{error}</p>}
 
-          {error && <p role="alert" className={s.error}>{error}</p>}
-
-          <div className={s.actions}>
-            <button type="submit" disabled={isPending} className={s.primaryButton}>
-              {isPending ? "Signing in…" : "Sign in"}
-            </button>
-            <div className={s.footer}>
-              <span className={s.footerText}>Don't have an account?</span>
-              <Link to="/register" className={s.footerLink}>Sign up</Link>
-            </div>
-          </div>
-        </form>
+        <button
+          className={s.primaryButton}
+          onClick={login}
+          disabled={loading}
+        >
+          {loading ? 'Signing in…' : 'Connect wallet'}
+        </button>
       </div>
     </div>
-  );
+  )
 }

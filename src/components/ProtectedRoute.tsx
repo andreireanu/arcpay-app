@@ -3,10 +3,10 @@ import { useAuth } from "../hooks/useAuth";
 import type { ReactNode } from "react";
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session } = useAuth();
+  const { loading, authenticated } = useAuth();
 
-  if (session === undefined) {
-    return <p>Loading...</p>;
+  if (loading) {
+    return null;
   }
-  return session ? <>{children}</> : <Navigate to="/login" replace />;
+  return authenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }

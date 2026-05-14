@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react'
-import { useWallet, useAnchorWallet } from '@solana/wallet-adapter-react'
-import { useWalletModal } from '@solana/wallet-adapter-react-ui'
+import { useSolanaWallets } from '@privy-io/react-auth/solana'
 import QRCode from 'qrcode'
 import { useAuth } from '../hooks/useAuth'
-import { useRegister } from '../hooks/useRegister'
-import { useCreateListing } from '../hooks/useCreateListing'
 import {
   getOffersByWallet,
+  insertOffer,
   pauseOffer,
   resumeOffer,
   cancelOffer,
   watchOfferStatuses,
 } from '../supabase/offers/offers'
+import { getProduct } from '../supabase/products/products'
 import type { Offer } from '../types/offer'
 import AddOfferModal from '../components/AddOfferModal'
 import s from '../styles/dashboard.module.css'
+
+const QR_PRODUCT_ID = '2b78e60b-533d-469d-937e-aa462dc37c28'
 
 function PauseIcon() {
   return (
@@ -43,20 +44,18 @@ function CloseIcon() {
 
 export default function Dashboard() {
   const { signOutUser } = useAuth()
-  const { connected, publicKey } = useWallet()
-  const { setVisible: openWalletModal } = useWalletModal()
-  const { register, registering, registered, error: registerError } = useRegister()
-  const { createListing, creating } = useCreateListing()
-  const anchorWallet = useAnchorWallet()
-  const walletAddress = anchorWallet?.publicKey?.toBase58()
+  const { wallets } = useSolanaWallets()
+  const walletAddress = wallets[0]?.address
   const [offers, setOffers] = useState<Offer[]>([])
   const [offerModalOpen, setOfferModalOpen] = useState(false)
   const [togglingOffer, setTogglingOffer] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    if (!registered || !walletAddress) return
+    if (!walletAddress) return
     getOffersByWallet(walletAddress).then(setOffers).catch(console.error)
-  }, [registered, walletAddress])
+  }, [walletAddress])
 
   const offerIds = offers.map((o) => o.id)
   useEffect(() => {
@@ -69,14 +68,20 @@ export default function Dashboard() {
 
   async function handleSignOut() {
     await signOutUser()
-    window.location.href = '/login'
   }
 
   async function handleCreateOffer(name: string, description: string, priceLamports: number, quantity: number) {
-    const offer = await createListing(name, description, priceLamports, quantity)
-    if (offer) {
+    if (!walletAddress) return
+    setCreating(true)
+    try {
+      const product = await getProduct(QR_PRODUCT_ID)
+      const offer = await insertOffer(walletAddress, name, description, priceLamports, product.fee_bps, quantity)
       setOffers((prev) => [offer, ...prev])
       setOfferModalOpen(false)
+    } catch (err) {
+      console.error('Failed to create offer', err)
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -135,8 +140,8 @@ export default function Dashboard() {
     return ''
   }
 
-  const shortAddress = publicKey
-    ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}`
+  const shortAddress = walletAddress
+    ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
     : null
 
   return (
@@ -147,9 +152,19 @@ export default function Dashboard() {
           <span className={s.logoWordmark}>arcpay</span>
         </div>
         <div className={s.headerActions}>
-          <button className={s.walletButton} onClick={() => openWalletModal(true)}>
-            {connected && shortAddress ? shortAddress : 'Connect wallet'}
-          </button>
+          {shortAddress && (
+            <button
+              className={s.walletButton}
+              onClick={() => {
+                navigator.clipboard.writeText(walletAddress!)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+              }}
+              title={walletAddress}
+            >
+              {copied ? '✓ Copied' : shortAddress}
+            </button>
+          )}
           <button className={s.signOutButton} onClick={handleSignOut}>
             Sign out
           </button>
@@ -157,114 +172,89 @@ export default function Dashboard() {
       </header>
 
       <main className={s.content}>
-        {!anchorWallet && (
-          <div className={s.stateBanner}>
-            <p className={s.stateBannerText}>Connect your wallet to get started.</p>
+        <section className={s.offersSection}>
+          <div className={s.offersSectionHeader}>
+            <h2 className={s.sectionTitle}>QR Offers</h2>
+            <button className={s.createButton} onClick={() => setOfferModalOpen(true)}>
+              Create
+            </button>
           </div>
-        )}
 
-        {anchorWallet && !registered && (
-          <div className={s.stateBanner}>
-            <p className={s.stateBannerText}>
-              {registering
-                ? 'Sign the message in your wallet to verify ownership…'
-                : registerError
-                  ? `Wallet verification failed: ${registerError}`
-                  : 'Verifying wallet…'}
+          {offers.length === 0 ? (
+            <p className={s.offersEmpty}>
+              No offers yet. Create one to generate a QR code buyers can scan to pay.
             </p>
-            {registerError && !registering && (
-              <button className={s.retryButton} onClick={register}>
-                Try again
-              </button>
-            )}
-          </div>
-        )}
-
-        {registered && (
-          <section className={s.offersSection}>
-            <div className={s.offersSectionHeader}>
-              <h2 className={s.sectionTitle}>QR Offers</h2>
-              <button className={s.createButton} onClick={() => setOfferModalOpen(true)}>
-                Create
-              </button>
-            </div>
-
-            {offers.length === 0 ? (
-              <p className={s.offersEmpty}>
-                No offers yet. Create one to generate a QR code buyers can scan to pay.
-              </p>
-            ) : (
-              <div className={s.offersGrid}>
-                {offers.map((offer) => (
-                  <div key={offer.id} className={s.offerCard}>
-                    <div className={s.offerCardTop}>
-                      <div className={s.offerInfo}>
-                        <div className={s.offerMeta}>
-                          <h3 className={s.offerName}>{offer.name}</h3>
-                          {offer.description && (
-                            <p className={s.offerDescription}>{offer.description}</p>
-                          )}
-                        </div>
-                        <p className={s.offerPrice}>
-                          {(offer.price_lamports / 1_000_000_000).toFixed(4)} SOL
-                        </p>
-                        <p className={s.offerQuantity}>
-                          {offer.quantity - offer.quantity_sold} of {offer.quantity} remaining
-                        </p>
-                      </div>
-                      <div className={s.offerCardRight}>
-                        <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
-                          {offer.status}
-                        </span>
-                        {(offer.status === 'active' || offer.status === 'paused') && (
-                          <div className={s.offerTopActions}>
-                            <button
-                              className={s.pauseButton}
-                              disabled={togglingOffer === offer.id}
-                              onClick={() =>
-                                offer.status === 'active'
-                                  ? handlePause(offer)
-                                  : handleResume(offer)
-                              }
-                            >
-                              {offer.status === 'active' ? <PauseIcon /> : <PlayIcon />}
-                              {togglingOffer === offer.id
-                                ? offer.status === 'active' ? 'Pausing…' : 'Resuming…'
-                                : offer.status === 'active' ? 'Pause offer' : 'Resume offer'}
-                            </button>
-                            <button
-                              className={s.cancelButton}
-                              onClick={() => handleCancel(offer)}
-                            >
-                              <CloseIcon />
-                              Cancel offer
-                            </button>
-                          </div>
+          ) : (
+            <div className={s.offersGrid}>
+              {offers.map((offer) => (
+                <div key={offer.id} className={s.offerCard}>
+                  <div className={s.offerCardTop}>
+                    <div className={s.offerInfo}>
+                      <div className={s.offerMeta}>
+                        <h3 className={s.offerName}>{offer.name}</h3>
+                        {offer.description && (
+                          <p className={s.offerDescription}>{offer.description}</p>
                         )}
                       </div>
+                      <p className={s.offerPrice}>
+                        {(offer.price_lamports / 1_000_000_000).toFixed(4)} SOL
+                      </p>
+                      <p className={s.offerQuantity}>
+                        {offer.quantity - offer.quantity_sold} of {offer.quantity} remaining
+                      </p>
                     </div>
-                    <div className={s.offerBottomActions}>
-                      <a
-                        href={`/pay/${offer.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={s.viewPageButton}
-                      >
-                        View page
-                      </a>
-                      <button
-                        className={s.downloadQrButton}
-                        onClick={() => handleDownloadQr(offer)}
-                      >
-                        Download QR
-                      </button>
+                    <div className={s.offerCardRight}>
+                      <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
+                        {offer.status}
+                      </span>
+                      {(offer.status === 'active' || offer.status === 'paused') && (
+                        <div className={s.offerTopActions}>
+                          <button
+                            className={s.pauseButton}
+                            disabled={togglingOffer === offer.id}
+                            onClick={() =>
+                              offer.status === 'active'
+                                ? handlePause(offer)
+                                : handleResume(offer)
+                            }
+                          >
+                            {offer.status === 'active' ? <PauseIcon /> : <PlayIcon />}
+                            {togglingOffer === offer.id
+                              ? offer.status === 'active' ? 'Pausing…' : 'Resuming…'
+                              : offer.status === 'active' ? 'Pause offer' : 'Resume offer'}
+                          </button>
+                          <button
+                            className={s.cancelButton}
+                            onClick={() => handleCancel(offer)}
+                          >
+                            <CloseIcon />
+                            Cancel offer
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
+                  <div className={s.offerBottomActions}>
+                    <a
+                      href={`/pay/${offer.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={s.viewPageButton}
+                    >
+                      View page
+                    </a>
+                    <button
+                      className={s.downloadQrButton}
+                      onClick={() => handleDownloadQr(offer)}
+                    >
+                      Download QR
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
 
       <AddOfferModal
