@@ -26,17 +26,10 @@ export default function Login() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, walletAddress])
 
-  // user authenticated but embedded wallet not yet ready → generation in progress
-  const walletGenerating = !!user && !walletAddress && !error
+  const loading = !sdkHasLoaded || (!!user && !error)
 
-  const loading = !sdkHasLoaded || (!!user && !!walletAddress && !error)
-
-  const buttonDisabled = loading || walletGenerating
-  const buttonLabel = loading
-    ? 'Signing in…'
-    : walletGenerating
-    ? 'Generating wallet…'
-    : 'Connect wallet'
+  const buttonDisabled = loading
+  const buttonLabel = loading ? 'Signing in…' : 'Connect wallet'
 
   return (
     <div className={s.page}>
