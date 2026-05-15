@@ -1,68 +1,99 @@
-import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { useConnection } from '@solana/wallet-adapter-react'
-import { PublicKey } from '@solana/web3.js'
-import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
-import { isSolanaWallet } from '@dynamic-labs/solana-core'
-import { getOffer } from '../supabase/offers/offers'
-import { submitCounterOffer } from '../supabase/offers/counterOffers'
-import { buy } from '../solana/instructions/buy'
-import type { Offer } from '../types/offer'
-import s from '../styles/pay.module.css'
+import { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import { useConnection } from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
+import { useDynamicContext, getAuthToken } from "@dynamic-labs/sdk-react-core";
+import { isSolanaWallet } from "@dynamic-labs/solana-core";
+import { getOffer } from "../supabase/offers/offers";
+import { submitCounterOffer } from "../supabase/offers/counterOffers";
+import { getCounterOfferByBuyer } from "../supabase/offers/getCounterOffers";
+import { exchangeToken } from "../supabase/auth/exchangeToken";
+import type { CounterOffer } from "../types/counterOffer";
+import { buy } from "../solana/instructions/buy";
+import type { Offer } from "../types/offer";
+import s from "../styles/pay.module.css";
 
 export default function Pay() {
-  const { offerId } = useParams<{ offerId: string }>()
-  const [offer, setOffer] = useState<Offer | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [counterOfferOpen, setCounterOfferOpen] = useState(false)
-  const [counterPrice, setCounterPrice] = useState('')
-  const [buying, setBuying] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+  const { offerId } = useParams<{ offerId: string }>();
+  const [offer, setOffer] = useState<Offer | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [counterOfferOpen, setCounterOfferOpen] = useState(false);
+  const [counterPrice, setCounterPrice] = useState("");
+  const [buying, setBuying] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [activeCounterOffer, setActiveCounterOffer] =
+    useState<CounterOffer | null>(null);
 
-  const { connection } = useConnection()
-  const { primaryWallet, setShowAuthFlow } = useDynamicContext()
-  const connected = !!primaryWallet && isSolanaWallet(primaryWallet)
-  const publicKey = connected ? new PublicKey(primaryWallet.address) : null
+  const { connection } = useConnection();
+  const { primaryWallet, setShowAuthFlow, user } = useDynamicContext();
+  const connected = !!primaryWallet && isSolanaWallet(primaryWallet);
+  const exchangingRef = useRef(false);
 
   useEffect(() => {
-    if (!offerId) return
+    if (!offerId) return;
     getOffer(offerId)
       .then(setOffer)
       .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [offerId])
+      .finally(() => setLoading(false));
+  }, [offerId]);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!user || !primaryWallet || !token || exchangingRef.current) return;
+    exchangingRef.current = true;
+    exchangeToken(token, primaryWallet.address, "buyer")
+      .then(() => getCounterOfferByBuyer(offerId!, primaryWallet.address))
+      .then(setActiveCounterOffer)
+      .catch(console.error)
+      .finally(() => {
+        exchangingRef.current = false;
+      });
+  }, [user, primaryWallet]);
 
   async function handleBuy() {
-    if (!connected || !primaryWallet || !offerId || buying) return
-    setBuying(true)
-    const signer = await primaryWallet.getSigner()
+    if (!connected || !primaryWallet || !offerId || buying) return;
+    setBuying(true);
+    const signer = await primaryWallet.getSigner();
     const anchorWallet = {
       publicKey: new PublicKey(primaryWallet.address),
       signTransaction: signer.signTransaction.bind(signer),
       signAllTransactions: signer.signAllTransactions.bind(signer),
-    } as unknown as import('@solana/wallet-adapter-react').AnchorWallet
+    } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
     try {
-      await buy(connection, anchorWallet, offerId)
+      await buy(connection, anchorWallet, offerId);
     } finally {
-      setBuying(false)
+      setBuying(false);
     }
   }
 
   async function handleSubmitCounterOffer() {
-    if (!offerId || !publicKey || !counterPrice) return
-    const lamports = Math.round(parseFloat(counterPrice) * 1_000_000_000)
-    if (!lamports || lamports <= 0) return
-    setSubmitting(true)
+    if (!offerId || !connected || !primaryWallet || !counterPrice || !offer)
+      return;
+    const lamports = Math.round(parseFloat(counterPrice) * 1_000_000_000);
+    if (!lamports || lamports <= 0) return;
+    if (lamports >= offer.price_lamports) return;
+    setSubmitting(true);
     try {
-      await submitCounterOffer(offerId, publicKey.toBase58(), lamports)
-      setSubmitted(true)
-      setCounterOfferOpen(false)
-      setCounterPrice('')
+      const signer = await primaryWallet.getSigner();
+      const anchorWallet = {
+        publicKey: new PublicKey(primaryWallet.address),
+        signTransaction: signer.signTransaction.bind(signer),
+        signAllTransactions: signer.signAllTransactions.bind(signer),
+      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
+      await submitCounterOffer(connection, anchorWallet, offerId, lamports);
+      setSubmitted(true);
+      setCounterOfferOpen(false);
+      setCounterPrice("");
+      if (primaryWallet) {
+        getCounterOfferByBuyer(offerId, primaryWallet.address)
+          .then(setActiveCounterOffer)
+          .catch(console.error);
+      }
     } catch (err) {
-      console.error('Failed to submit counter offer', err)
+      console.error("Failed to submit counter offer", err);
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
@@ -76,7 +107,7 @@ export default function Pay() {
           <p className={s.statusMessage}>Loading…</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!offer) {
@@ -89,11 +120,11 @@ export default function Pay() {
           <p className={s.statusMessage}>Offer not found.</p>
         </div>
       </div>
-    )
+    );
   }
 
-  const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4)
-  const isAvailable = offer.status === 'active'
+  const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
+  const isAvailable = offer.status === "active";
 
   return (
     <>
@@ -112,36 +143,68 @@ export default function Pay() {
           </div>
 
           {!isAvailable ? (
-            <span className={`${s.unavailableBadge} ${
-              offer.status === 'paused' ? s.unavailablePaused :
-              offer.status === 'sold' ? s.unavailableSold :
-              s.unavailableCanceled
-            }`}>
-              {offer.status === 'paused' ? 'Paused' : offer.status === 'sold' ? 'Sold out' : 'Cancelled'}
+            <span
+              className={`${s.unavailableBadge} ${
+                offer.status === "paused"
+                  ? s.unavailablePaused
+                  : offer.status === "sold"
+                    ? s.unavailableSold
+                    : s.unavailableCanceled
+              }`}
+            >
+              {offer.status === "paused"
+                ? "Paused"
+                : offer.status === "sold"
+                  ? "Sold out"
+                  : "Cancelled"}
             </span>
           ) : submitted ? (
             <p className={s.successMessage}>Counter offer submitted!</p>
           ) : (
             <div className={s.actions}>
               {connected ? (
-                <button className={s.buyButton} onClick={handleBuy} disabled={buying}>
-                  {buying ? 'Buying…' : 'BUY'}
+                <button
+                  className={s.buyButton}
+                  onClick={handleBuy}
+                  disabled={buying}
+                >
+                  {buying ? "Buying…" : "BUY"}
                 </button>
               ) : (
-                <button className={s.connectButton} onClick={() => setShowAuthFlow(true)}>
+                <button
+                  className={s.connectButton}
+                  onClick={() => setShowAuthFlow(true)}
+                >
                   Connect wallet
                 </button>
               )}
 
-              {connected && (
+              {connected && activeCounterOffer && (
+                <div className={s.activeOfferRow}>
+                  <span className={s.activeOfferLabel}>
+                    Your active offer made:
+                  </span>
+                  <span className={s.activeOfferAmount}>
+                    {(activeCounterOffer.amount / 1_000_000_000).toFixed(2)} SOL
+                  </span>
+                </div>
+              )}
+
+              {connected && !activeCounterOffer && (
                 <>
                   <div className={s.counterOfferHint}>
-                    <p className={s.counterOfferHintBold}>Not ready to pay full price?</p>
+                    <p className={s.counterOfferHintBold}>
+                      Not ready to pay full price?
+                    </p>
                     <p className={s.counterOfferHintText}>
-                      You can submit an offer for this item at a price that works for you.
+                      You can submit an offer for this item at a price that
+                      works for you.
                     </p>
                   </div>
-                  <button className={s.createOfferButton} onClick={() => setCounterOfferOpen(true)}>
+                  <button
+                    className={s.createOfferButton}
+                    onClick={() => setCounterOfferOpen(true)}
+                  >
                     Create offer
                   </button>
                 </>
@@ -152,36 +215,58 @@ export default function Pay() {
       </div>
 
       {counterOfferOpen && (
-        <div className={s.modalOverlay} onClick={() => setCounterOfferOpen(false)}>
+        <div
+          className={s.modalOverlay}
+          onClick={() => setCounterOfferOpen(false)}
+        >
           <div className={s.modal} onClick={(e) => e.stopPropagation()}>
-            <h2 className={s.modalTitle}>Make an offer</h2>
+            <h2 className={s.modalTitle}>Create offer</h2>
+            <p className={s.modalDescription}>
+              Submit an offer below. This is not a purchase - your offer will be
+              accepted automatically if it qualifies for an active discount, a
+              future marketing discount campaign or reviewed manually by the
+              merchant. You'll be notified before any payment is taken.
+            </p>
+            <button className={s.modalLearnMore} onClick={() => {}}>
+              Learn more about offers
+            </button>
             <div className={s.modalField}>
-              <label className={s.modalLabel}>Your price (SOL)</label>
+              <label className={s.modalLabel}>Offered price (SOL)</label>
               <input
                 className={s.modalInput}
                 type="number"
                 step="0.0001"
                 min="0"
-                placeholder="0.0000"
+                placeholder="0.00"
                 value={counterPrice}
                 onChange={(e) => setCounterPrice(e.target.value)}
               />
             </div>
             <div className={s.modalActions}>
-              <button className={s.modalCancelButton} onClick={() => setCounterOfferOpen(false)}>
+              <button
+                className={s.modalCancelButton}
+                onClick={() => setCounterOfferOpen(false)}
+              >
                 Cancel
               </button>
               <button
                 className={s.modalSubmitButton}
-                disabled={!counterPrice || parseFloat(counterPrice) <= 0 || submitting}
+                disabled={
+                  !counterPrice ||
+                  parseFloat(counterPrice) <= 0 ||
+                  (!!offer &&
+                    Math.round(parseFloat(counterPrice) * 1_000_000_000) >=
+                      offer.price_lamports) ||
+                  submitting
+                }
                 onClick={handleSubmitCounterOffer}
               >
-                {submitting ? 'Submitting…' : 'Submit offer'}
+                {submitting ? "Creating…" : "Create"}
               </button>
             </div>
           </div>
         </div>
       )}
     </>
-  )
+  );
 }

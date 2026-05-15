@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
+import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
 import { getOffer, pauseOffer, resumeOffer, cancelOffer, watchOfferStatuses } from '../supabase/offers/offers'
+import { getCounterOffersByOffer } from '../supabase/offers/getCounterOffers'
 import type { Offer } from '../types/offer'
+import type { CounterOffer } from '../types/counterOffer'
 import s from '../styles/dashboard.module.css'
 
 function PauseIcon() {
@@ -33,17 +36,26 @@ function CloseIcon() {
 export default function OfferDetail() {
   const { offerId } = useParams<{ offerId: string }>()
   const navigate = useNavigate()
+  const { primaryWallet } = useDynamicContext()
   const [offer, setOffer] = useState<Offer | null>(null)
   const [loading, setLoading] = useState(true)
   const [toggling, setToggling] = useState(false)
+  const [counterOffers, setCounterOffers] = useState<CounterOffer[]>([])
 
   useEffect(() => {
     if (!offerId) return
     getOffer(offerId)
-      .then(setOffer)
+      .then((o) => {
+        if (!o || o.seller_wallet !== primaryWallet?.address) {
+          navigate(`/pay/${offerId}`, { replace: true })
+          return
+        }
+        setOffer(o)
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [offerId])
+    getCounterOffersByOffer(offerId).then(setCounterOffers).catch(console.error)
+  }, [offerId, primaryWallet?.address])
 
   useEffect(() => {
     if (!offerId) return
@@ -100,6 +112,20 @@ export default function OfferDetail() {
     a.download = `${offer.name}-qr.svg`
     a.click()
     URL.revokeObjectURL(a.href)
+  }
+
+  function formatDate(iso: string) {
+    const d = new Date(iso)
+    return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}.${d.getFullYear()}`
+  }
+
+  function shortWallet(address: string) {
+    return `${address.slice(0, 4)}...${address.slice(-4)}`
+  }
+
+  function isExpiringSoon(expiryIso: string) {
+    const sevenDays = 7 * 24 * 60 * 60 * 1000
+    return new Date(expiryIso).getTime() - Date.now() < sevenDays
   }
 
   function statusClass(status: Offer['status']) {
@@ -211,6 +237,62 @@ export default function OfferDetail() {
               Download QR
             </button>
           </div>
+
+          {counterOffers.length > 0 && (
+            <section className={s.counterOffersSection}>
+              <div className={s.counterOffersHeader}>
+                <h2 className={s.counterOffersTitle}>Counter offers</h2>
+                <div className={s.counterOffersStats}>
+                  <div className={s.counterOffersStat}>
+                    <span className={s.counterOffersStatLabel}>Expiring in 7 days</span>
+                    <span className={s.counterOffersStatValue}>
+                      {(counterOffers
+                        .filter(co => isExpiringSoon(co.expiry_at))
+                        .reduce((sum, co) => sum + co.amount, 0) / 1_000_000_000
+                      ).toFixed(4)} SOL
+                    </span>
+                  </div>
+                  <div className={s.counterOffersStat}>
+                    <span className={s.counterOffersStatLabel}>Total if accepted</span>
+                    <span className={s.counterOffersStatValue}>
+                      {(counterOffers.reduce((sum, co) => sum + co.amount, 0) / 1_000_000_000).toFixed(4)} SOL
+                    </span>
+                  </div>
+                </div>
+              </div>
+              {counterOffers.map(co => (
+                <div key={co.id} className={s.counterOfferRow}>
+                  <div className={s.counterOfferMeta}>
+                    <span className={s.counterOfferDate}>
+                      {formatDate(co.created_at)}
+                    </span>
+                    <span className={s.counterOfferWallet}>
+                      From wallet: {shortWallet(co.buyer_wallet)}
+                    </span>
+                    <span className={s.counterOfferAmount}>
+                      {(co.amount / 1_000_000_000).toFixed(4)} SOL
+                    </span>
+                    <span className={s.counterOfferExpiry}>
+                      Expire on {formatDate(co.expiry_at)}
+                    </span>
+                    {offer && (
+                      <span className={s.counterOfferProfit}>
+                        Profit {((offer.price_lamports - co.amount) / 1_000_000_000).toFixed(4)} SOL
+                      </span>
+                    )}
+                  </div>
+                  <div className={s.counterOfferActions}>
+                    <span className={isExpiringSoon(co.expiry_at) ? s.counterOfferStatusExpiring : s.counterOfferStatusActive}>
+                      {isExpiringSoon(co.expiry_at) ? 'expiring soon' : 'active'}
+                    </span>
+                    <button className={s.declineButton}>Decline</button>
+                    <button className={s.acceptButton}>Accept</button>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
+
         </div>
       </main>
     </div>

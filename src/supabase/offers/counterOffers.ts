@@ -1,12 +1,12 @@
-import { supabase } from '../client'
+import type { Connection } from '@solana/web3.js'
+import type { AnchorWallet } from '@solana/wallet-adapter-react'
+import { submitOffer } from '../../solana/instructions/offer'
 
 export async function submitCounterOffer(
+  connection: Connection,
+  wallet: AnchorWallet,
   offerId: string,
-  buyerWallet: string,
   amountLamports: number,
-): Promise<void> {
-  const { error } = await supabase
-    .from('counter_offers')
-    .insert({ offer_id: offerId, buyer_wallet: buyerWallet, amount_lamports: amountLamports, status: 'pending' })
-  if (error) throw error
+): Promise<string> {
+  return submitOffer(connection, wallet, offerId, amountLamports)
 }

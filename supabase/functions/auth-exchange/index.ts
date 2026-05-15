@@ -17,10 +17,11 @@ Deno.serve(async (req) => {
   }
   const dynamicToken = authHeader.slice(7);
 
-  const { wallet_address: walletAddress } = await req.json();
+  const { wallet_address: walletAddress, role } = await req.json();
   if (!walletAddress) {
     return new Response("Missing wallet_address", { status: 400, headers: corsHeaders });
   }
+  const userRole: string = role === "buyer" ? "buyer" : "seller";
 
   const dynamicEnvId = Deno.env.get("DYNAMIC_ENV_ID")!;
 
@@ -41,6 +42,16 @@ Deno.serve(async (req) => {
   const internalEmail = `${walletAddress}@wallet.arcpay`;
   const siteUrl = Deno.env.get("SITE_URL") ?? "http://localhost:5173";
 
+  // Update role in user_metadata on every login so it reflects the current entry point.
+  await supabaseAdmin.auth.admin.listUsers().then(async ({ data }) => {
+    const existing = data.users.find((u) => u.email === internalEmail);
+    if (existing) {
+      await supabaseAdmin.auth.admin.updateUserById(existing.id, {
+        user_metadata: { wallet_address: walletAddress, role: userRole },
+      });
+    }
+  });
+
   let { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
     type: "magiclink",
     email: internalEmail,
@@ -51,7 +62,7 @@ Deno.serve(async (req) => {
     const { error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: internalEmail,
       email_confirm: true,
-      user_metadata: { wallet_address: walletAddress },
+      user_metadata: { wallet_address: walletAddress, role: userRole },
     });
     if (createError) {
       console.error("Failed to create Supabase user", createError);

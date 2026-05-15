@@ -168,11 +168,10 @@
 
 .modal {
   width: 100%;
-  max-width: 420px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  max-width: 560px;
+  background: #1a1a1a;
   border-radius: 24px;
-  padding: 32px;
+  padding: 40px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -181,61 +180,82 @@
 .modalTitle {
   font-family: var(--font-heading);
   font-weight: 700;
-  font-size: 20px;
-  line-height: 28px;
-  letter-spacing: -0.3px;
+  font-size: 28px;
+  line-height: 36px;
+  letter-spacing: -0.5px;
   color: var(--color-white);
+}
+
+.modalDescription {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 26px;
+  color: var(--color-muted);
+}
+
+.modalLearnMore {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--color-muted);
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: -8px;
+  align-self: flex-start;
 }
 
 .modalField {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .modalLabel {
   font-family: var(--font-body);
   font-weight: 500;
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--color-muted);
-}
-
-.modalInput {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 12px 16px;
-  font-family: var(--font-body);
-  font-weight: 400;
   font-size: 15px;
   line-height: 22px;
   color: var(--color-white);
-  width: 100%;
-  outline: none;
-  transition: border-color 0.15s;
 }
 
-.modalInput:focus {
-  border-color: var(--color-yellow);
+.modalInput {
+  background: #2a2a2a;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 16px 20px;
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-white);
+  width: 100%;
+  outline: none;
+}
+
+.modalInput::placeholder {
+  color: #666;
 }
 
 .modalActions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 .modalCancelButton {
   flex: 1;
-  background: transparent;
-  border: 1px solid var(--color-border);
+  background: var(--color-black);
+  border: none;
   border-radius: var(--radius-pill);
-  padding: 12px 20px;
+  padding: 16px 24px;
   font-family: var(--font-body);
   font-weight: 700;
-  font-size: 15px;
-  line-height: 22px;
-  color: var(--color-muted);
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-white);
   cursor: pointer;
   transition: opacity 0.15s;
 }
@@ -249,11 +269,11 @@
   background: var(--color-yellow);
   border: none;
   border-radius: var(--radius-pill);
-  padding: 12px 20px;
+  padding: 16px 24px;
   font-family: var(--font-body);
   font-weight: 700;
-  font-size: 15px;
-  line-height: 22px;
+  font-size: 16px;
+  line-height: 24px;
   color: var(--color-black);
   cursor: pointer;
   transition: opacity 0.15s;
@@ -291,6 +311,27 @@
   color: var(--color-error);
   text-align: center;
 }
+
+.activeOfferRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.activeOfferLabel {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+.activeOfferAmount {
+  color: var(--color-yellow);
+  font-weight: 600;
+  flex: 1;
+}
+
 
 .unavailableBadge {
   align-self: center;

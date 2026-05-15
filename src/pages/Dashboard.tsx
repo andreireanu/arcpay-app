@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
+import { useDynamicContext, getAuthToken } from '@dynamic-labs/sdk-react-core'
 import { useAuth } from '../hooks/useAuth'
 import { getOffersByWallet, insertOffer, watchOfferStatuses } from '../supabase/offers/offers'
 import { registerSellerIfNew } from '../supabase/sellers/sellers'
 import { getProduct } from '../supabase/products/products'
+import { getCurrentRole } from '../supabase/auth/auth'
+import { exchangeToken } from '../supabase/auth/exchangeToken'
 import type { Offer } from '../types/offer'
 import AddOfferModal from '../components/AddOfferModal'
 import s from '../styles/dashboard.module.css'
@@ -19,12 +21,42 @@ export default function Dashboard() {
   const [offers, setOffers] = useState<Offer[]>([])
   const [offerModalOpen, setOfferModalOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [walletMenuOpen, setWalletMenuOpen] = useState(false)
+
+  const [role, setRole] = useState<'seller' | 'buyer'>(getCurrentRole())
+  const [switchingRole, setSwitchingRole] = useState(false)
+  const walletMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!walletAddress) return
     getOffersByWallet(walletAddress).then(setOffers).catch(console.error)
   }, [walletAddress])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (walletMenuRef.current && !walletMenuRef.current.contains(e.target as Node)) {
+        setWalletMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  async function handleSwitchRole() {
+    const newRole = role === 'seller' ? 'buyer' : 'seller'
+    const token = getAuthToken()
+    if (!token || !walletAddress) return
+    setSwitchingRole(true)
+    try {
+      await exchangeToken(token, walletAddress, newRole)
+      setRole(newRole)
+    } catch (err) {
+      console.error('Failed to switch role', err)
+    } finally {
+      setSwitchingRole(false)
+      setWalletMenuOpen(false)
+    }
+  }
 
   useEffect(() => {
     if (offers.length === 0) return
@@ -73,17 +105,36 @@ export default function Dashboard() {
         </div>
         <div className={s.headerActions}>
           {shortAddress && (
-            <button
-              className={s.walletButton}
-              onClick={() => {
-                navigator.clipboard.writeText(walletAddress!)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 2000)
-              }}
-              title={walletAddress}
-            >
-              {copied ? '✓ Copied' : shortAddress}
-            </button>
+            <div className={s.walletMenu} ref={walletMenuRef}>
+              <button
+                className={s.walletButton}
+                onClick={() => setWalletMenuOpen((o) => !o)}
+                title={walletAddress}
+              >
+                <span className={s.walletRoleBadge}>{role}</span>
+                {shortAddress}
+              </button>
+              {walletMenuOpen && (
+                <div className={s.walletDropdown}>
+                  <button
+                    className={s.walletDropdownItem}
+                    onClick={() => {
+                      navigator.clipboard.writeText(walletAddress!)
+                      setWalletMenuOpen(false)
+                    }}
+                  >
+                    Copy address
+                  </button>
+                  <button
+                    className={s.walletDropdownItem}
+                    onClick={handleSwitchRole}
+                    disabled={switchingRole}
+                  >
+                    {switchingRole ? 'Switching…' : `Switch to ${role === 'seller' ? 'buyer' : 'seller'}`}
+                  </button>
+                </div>
+              )}
+            </div>
           )}
           <button className={s.signOutButton} onClick={() => signOutUser()}>
             Sign out
@@ -110,7 +161,7 @@ export default function Dashboard() {
                 <div
                   key={offer.id}
                   className={s.offerCard}
-                  onClick={() => navigate(`/offers/${offer.id}`)}
+                  onClick={() => navigate(`/offer/${offer.id}`)}
                   style={{ cursor: 'pointer' }}
                 >
                   <div className={s.offerCardTop}>

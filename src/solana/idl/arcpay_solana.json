@@ -131,6 +131,118 @@
       ]
     },
     {
+      "name": "offer",
+      "discriminator": [
+        53,
+        204,
+        36,
+        90,
+        151,
+        6,
+        54,
+        231
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "seller"
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seller"
+              }
+            ]
+          }
+        },
+        {
+          "name": "offer_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "uuid"
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "uuid",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "expiry",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "withdraw_commission",
       "discriminator": [
         136,
@@ -192,6 +304,32 @@
         204,
         130
       ]
+    },
+    {
+      "name": "OfferRecord",
+      "discriminator": [
+        35,
+        97,
+        209,
+        109,
+        100,
+        168,
+        61,
+        191
+      ]
+    },
+    {
+      "name": "SellerVault",
+      "discriminator": [
+        40,
+        215,
+        104,
+        97,
+        10,
+        251,
+        107,
+        143
+      ]
     }
   ],
   "events": [
@@ -206,6 +344,19 @@
         103,
         11,
         29
+      ]
+    },
+    {
+      "name": "OfferCreated",
+      "discriminator": [
+        31,
+        236,
+        215,
+        144,
+        75,
+        45,
+        157,
+        87
       ]
     },
     {
@@ -267,6 +418,21 @@
       "code": 6008,
       "name": "InsufficientCommissionBalance",
       "msg": "Withdrawal amount exceeds available commission balance"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6010,
+      "name": "NotBuyer",
+      "msg": "Unauthorized: not the offer buyer"
+    },
+    {
+      "code": 6011,
+      "name": "InsufficientVaultBalance",
+      "msg": "Insufficient vault balance"
     }
   ],
   "types": [
@@ -318,6 +484,75 @@
           },
           {
             "name": "backend_pubkey",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OfferCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "uuid",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OfferRecord",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SellerVault",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seller",
             "type": "pubkey"
           },
           {
