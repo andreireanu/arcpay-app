@@ -184,6 +184,46 @@
   gap: 12px;
 }
 
+.offersList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.offerRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 16px 20px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+
+.offerRow:hover {
+  border-color: var(--color-muted);
+}
+
+.offerRowName {
+  flex: 1;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--color-white);
+}
+
+.offerRowPrice {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--color-white);
+  white-space: nowrap;
+}
+
 /* ── Offer card ──────────────────────────────────────────── */
 .offerCard {
   background: var(--color-bg);

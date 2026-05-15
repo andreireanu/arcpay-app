@@ -1,5 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { PublicKey } from "https://esm.sh/@solana/web3.js@1";
+
+const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function base58Encode(bytes: Uint8Array): string {
+  let n = bytes.reduce((acc, b) => acc * 256n + BigInt(b), 0n);
+  const chars: string[] = [];
+  while (n > 0n) { chars.unshift(BASE58[Number(n % 58n)]); n /= 58n; }
+  for (const b of bytes) { if (b !== 0) break; chars.unshift("1"); }
+  return chars.join("");
+}
 
 async function buyCompletedDiscriminator(): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(
@@ -52,7 +60,7 @@ Deno.serve(async (req) => {
       if (bytes.length < 112 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
 
       const offerId = bytesToUuid(bytes.slice(8, 24));
-      const buyerWallet = new PublicKey(bytes.slice(24, 56)).toBase58();
+      const buyerWallet = base58Encode(bytes.slice(24, 56));
       // bytes 56–88 are the seller wallet (skipped — derivable from qr_offers)
       const sellerAmount = Number(new DataView(bytes.buffer, bytes.byteOffset + 88, 8).getBigUint64(0, true));
       const feeAmount = Number(new DataView(bytes.buffer, bytes.byteOffset + 96, 8).getBigUint64(0, true));
@@ -67,7 +75,12 @@ Deno.serve(async (req) => {
           fee_amount: feeAmount,
           quantity: 1,
         });
-      if (txError) console.error("transaction insert error", txError);
+      if (txError) {
+        // code 23505 = unique_violation: Helius delivered this webhook twice, safe to ignore.
+        if (txError.code === "23505") console.warn("duplicate webhook delivery, skipping", txSignature);
+        else console.error("transaction insert error", txError);
+        continue;
+      }
 
       const { error: qtyError } = await supabase.rpc(
         "increment_offer_quantity_sold",

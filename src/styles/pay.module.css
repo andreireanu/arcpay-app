@@ -106,6 +106,168 @@
   opacity: 0.88;
 }
 
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.counterOfferHint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+}
+
+.counterOfferHintBold {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+.counterOfferHintText {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+.createOfferButton {
+  background: var(--color-black);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 14px 20px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-white);
+  width: 100%;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.createOfferButton:hover {
+  opacity: 0.8;
+}
+
+/* Counter-offer modal */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 24px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.modalTitle {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: -0.3px;
+  color: var(--color-white);
+}
+
+.modalField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modalLabel {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+.modalInput {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 12px 16px;
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--color-white);
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.modalInput:focus {
+  border-color: var(--color-yellow);
+}
+
+.modalActions {
+  display: flex;
+  gap: 10px;
+}
+
+.modalCancelButton {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 12px 20px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.modalCancelButton:hover {
+  opacity: 0.8;
+}
+
+.modalSubmitButton {
+  flex: 1;
+  background: var(--color-yellow);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 12px 20px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--color-black);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.modalSubmitButton:hover {
+  opacity: 0.88;
+}
+
+.modalSubmitButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .statusMessage {
   font-family: var(--font-body);
   font-size: 14px;

@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
-import QRCode from 'qrcode'
 import { useAuth } from '../hooks/useAuth'
-import {
-  getOffersByWallet,
-  insertOffer,
-  pauseOffer,
-  resumeOffer,
-  cancelOffer,
-  watchOfferStatuses,
-} from '../supabase/offers/offers'
+import { getOffersByWallet, insertOffer, watchOfferStatuses } from '../supabase/offers/offers'
 import { registerSellerIfNew } from '../supabase/sellers/sellers'
 import { getProduct } from '../supabase/products/products'
 import type { Offer } from '../types/offer'
@@ -18,38 +11,13 @@ import s from '../styles/dashboard.module.css'
 
 const QR_PRODUCT_ID = '2b78e60b-533d-469d-937e-aa462dc37c28'
 
-function PauseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <rect x="6" y="4" width="4" height="16" rx="1" />
-      <rect x="14" y="4" width="4" height="16" rx="1" />
-    </svg>
-  )
-}
-
-function PlayIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M5 3l14 9-14 9V3z" />
-    </svg>
-  )
-}
-
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M18 6L6 18M6 6l12 12" />
-    </svg>
-  )
-}
-
 export default function Dashboard() {
   const { signOutUser } = useAuth()
   const { primaryWallet } = useDynamicContext()
+  const navigate = useNavigate()
   const walletAddress = primaryWallet?.address
   const [offers, setOffers] = useState<Offer[]>([])
   const [offerModalOpen, setOfferModalOpen] = useState(false)
-  const [togglingOffer, setTogglingOffer] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -58,18 +26,15 @@ export default function Dashboard() {
     getOffersByWallet(walletAddress).then(setOffers).catch(console.error)
   }, [walletAddress])
 
-  const offerIds = offers.map((o) => o.id)
   useEffect(() => {
-    if (offerIds.length === 0) return
-    return watchOfferStatuses(offerIds, (offerId, update) => {
-      setOffers((prev) => prev.map((o) => (o.id === offerId ? { ...o, ...update } : o)))
+    if (offers.length === 0) return
+    const ids = offers.map((o) => o.id)
+    return watchOfferStatuses(ids, (offerId, update) => {
+      setOffers((prev) =>
+        prev.map((o) => (o.id === offerId ? { ...o, ...update } : o))
+      )
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offerIds.join(',')])
-
-  async function handleSignOut() {
-    await signOutUser()
-  }
+  }, [offers.map((o) => o.id).join(',')])
 
   async function handleCreateOffer(name: string, description: string, priceLamports: number, quantity: number) {
     if (!walletAddress) return
@@ -85,53 +50,6 @@ export default function Dashboard() {
     } finally {
       setCreating(false)
     }
-  }
-
-  async function handlePause(offer: Offer) {
-    setTogglingOffer(offer.id)
-    await pauseOffer(offer.id)
-    setOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, status: 'paused' } : o)))
-    setTogglingOffer(null)
-  }
-
-  async function handleResume(offer: Offer) {
-    setTogglingOffer(offer.id)
-    await resumeOffer(offer.id)
-    setOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, status: 'active' } : o)))
-    setTogglingOffer(null)
-  }
-
-  async function handleCancel(offer: Offer) {
-    await cancelOffer(offer.id)
-    setOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, status: 'canceled' } : o)))
-  }
-
-  async function handleDownloadQr(offer: Offer) {
-    const url = `${window.location.origin}/pay/${offer.id}`
-    let svg: string = await QRCode.toString(url, { type: 'svg', errorCorrectionLevel: 'H' })
-    try {
-      const resp = await fetch('/favicon.svg')
-      if (resp.ok) {
-        const b64 = btoa(await resp.text())
-        const logoData = `data:image/svg+xml;base64,${b64}`
-        const match = svg.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/)
-        if (match) {
-          const w = parseFloat(match[1])
-          const h = parseFloat(match[2])
-          const logoSize = Math.round(w * 0.22)
-          const x = Math.round((w - logoSize) / 2)
-          const y = Math.round((h - logoSize) / 2)
-          const overlay = `<image href="${logoData}" x="${x}" y="${y}" width="${logoSize}" height="${logoSize}"/>`
-          svg = svg.replace('</svg>', `${overlay}</svg>`)
-        }
-      }
-    } catch { /* download without logo if fetch fails */ }
-    const blob = new Blob([svg], { type: 'image/svg+xml' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `${offer.name}-qr.svg`
-    a.click()
-    URL.revokeObjectURL(a.href)
   }
 
   function statusClass(status: Offer['status']) {
@@ -167,7 +85,7 @@ export default function Dashboard() {
               {copied ? '✓ Copied' : shortAddress}
             </button>
           )}
-          <button className={s.signOutButton} onClick={handleSignOut}>
+          <button className={s.signOutButton} onClick={() => signOutUser()}>
             Sign out
           </button>
         </div>
@@ -189,7 +107,12 @@ export default function Dashboard() {
           ) : (
             <div className={s.offersGrid}>
               {offers.map((offer) => (
-                <div key={offer.id} className={s.offerCard}>
+                <div
+                  key={offer.id}
+                  className={s.offerCard}
+                  onClick={() => navigate(`/offers/${offer.id}`)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <div className={s.offerCardTop}>
                     <div className={s.offerInfo}>
                       <div className={s.offerMeta}>
@@ -205,52 +128,9 @@ export default function Dashboard() {
                         {offer.quantity - offer.quantity_sold} of {offer.quantity} remaining
                       </p>
                     </div>
-                    <div className={s.offerCardRight}>
-                      <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
-                        {offer.status}
-                      </span>
-                      {(offer.status === 'active' || offer.status === 'paused') && (
-                        <div className={s.offerTopActions}>
-                          <button
-                            className={s.pauseButton}
-                            disabled={togglingOffer === offer.id}
-                            onClick={() =>
-                              offer.status === 'active'
-                                ? handlePause(offer)
-                                : handleResume(offer)
-                            }
-                          >
-                            {offer.status === 'active' ? <PauseIcon /> : <PlayIcon />}
-                            {togglingOffer === offer.id
-                              ? offer.status === 'active' ? 'Pausing…' : 'Resuming…'
-                              : offer.status === 'active' ? 'Pause offer' : 'Resume offer'}
-                          </button>
-                          <button
-                            className={s.cancelButton}
-                            onClick={() => handleCancel(offer)}
-                          >
-                            <CloseIcon />
-                            Cancel offer
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className={s.offerBottomActions}>
-                    <a
-                      href={`/pay/${offer.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={s.viewPageButton}
-                    >
-                      View page
-                    </a>
-                    <button
-                      className={s.downloadQrButton}
-                      onClick={() => handleDownloadQr(offer)}
-                    >
-                      Download QR
-                    </button>
+                    <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
+                      {offer.status}
+                    </span>
                   </div>
                 </div>
               ))}
