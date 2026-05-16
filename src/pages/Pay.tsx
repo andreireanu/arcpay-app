@@ -1,52 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import {
-  useAnchorWallet,
-  useConnection,
-  useWallet,
-} from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { getOffer, watchOfferStatus } from "../supabase/offers/offers";
-import { acceptListing } from "../solana/instructions/acceptListing";
-import type { OfferDetail } from "../types/offerDetail";
-
-const statusConfig: Record<string, { label: string; className: string }> = {
-  active: {
-    label: "Active",
-    className:
-      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  },
-  paused: {
-    label: "Paused",
-    className:
-      "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  },
-  canceled: {
-    label: "Canceled",
-    className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  },
-  unlisted: {
-    label: "Pending",
-    className: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-  },
-  sold: {
-    label: "Sold",
-    className:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  },
-};
+import { useConnection } from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
+import { useDynamicContext, getAuthToken } from "@dynamic-labs/sdk-react-core";
+import { isSolanaWallet } from "@dynamic-labs/solana-core";
+import { getOffer } from "../supabase/offers/offers";
+import { submitCounterOffer } from "../supabase/offers/counterOffers";
+import { getCounterOfferByBuyer, watchCounterOfferStatuses, watchBuyerCounterOfferInsert } from "../supabase/offers/getCounterOffers";
+import { exchangeToken } from "../supabase/auth/exchangeToken";
+import type { CounterOffer } from "../types/counterOffer";
+import { buy } from "../solana/instructions/buy";
+import type { Offer } from "../types/offer";
+import s from "../styles/pay.module.css";
 
 export default function Pay() {
   const { offerId } = useParams<{ offerId: string }>();
-  const [offer, setOffer] = useState<OfferDetail | null>(null);
+  const [offer, setOffer] = useState<Offer | null>(null);
   const [loading, setLoading] = useState(true);
+  const [counterOfferOpen, setCounterOfferOpen] = useState(false);
+  const [counterPrice, setCounterPrice] = useState("");
   const [buying, setBuying] = useState(false);
-  const [bought, setBought] = useState(false);
-  const [buyError, setBuyError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [activeCounterOffer, setActiveCounterOffer] =
+    useState<CounterOffer | null>(null);
 
-  const anchorWallet = useAnchorWallet();
-  const { connected } = useWallet();
   const { connection } = useConnection();
+  const { primaryWallet, setShowAuthFlow, user } = useDynamicContext();
+  const connected = !!primaryWallet && isSolanaWallet(primaryWallet);
+  const exchangingRef = useRef(false);
 
   useEffect(() => {
     if (!offerId) return;
@@ -54,125 +36,252 @@ export default function Pay() {
       .then(setOffer)
       .catch(console.error)
       .finally(() => setLoading(false));
-
-    const unsubscribe = watchOfferStatus(offerId, (status) => {
-      setOffer((prev) =>
-        prev ? { ...prev, status: status as typeof prev.status } : prev,
-      );
-    });
-    return unsubscribe;
   }, [offerId]);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!user || !primaryWallet || !token || exchangingRef.current) return;
+    exchangingRef.current = true;
+    exchangeToken(token, primaryWallet.address, "buyer")
+      .then(() => getCounterOfferByBuyer(offerId!, primaryWallet.address))
+      .then(setActiveCounterOffer)
+      .catch(console.error)
+      .finally(() => {
+        exchangingRef.current = false;
+      });
+  }, [user, primaryWallet, offerId]);
+
+  useEffect(() => {
+    if (!activeCounterOffer) return
+    return watchCounterOfferStatuses([activeCounterOffer.id], (_id, status) => {
+      if (status === 'confirmed') setActiveCounterOffer(null)
+    })
+  }, [activeCounterOffer])
+
+  useEffect(() => {
+    if (!submitted || activeCounterOffer || !offerId || !primaryWallet) return
+    return watchBuyerCounterOfferInsert(offerId, primaryWallet.address, (counterOffer) => {
+      setActiveCounterOffer(counterOffer)
+      setSubmitted(false)
+    })
+  }, [submitted, activeCounterOffer, offerId, primaryWallet])
+
+  async function handleBuy() {
+    if (!connected || !primaryWallet || !offerId || buying) return;
+    setBuying(true);
+    const signer = await primaryWallet.getSigner();
+    const anchorWallet = {
+      publicKey: new PublicKey(primaryWallet.address),
+      signTransaction: signer.signTransaction.bind(signer),
+      signAllTransactions: signer.signAllTransactions.bind(signer),
+    } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
+    try {
+      await buy(connection, anchorWallet, offerId);
+    } finally {
+      setBuying(false);
+    }
+  }
+
+  async function handleSubmitCounterOffer() {
+    if (!offerId || !connected || !primaryWallet || !counterPrice || !offer)
+      return;
+    const lamports = Math.round(parseFloat(counterPrice) * 1_000_000_000);
+    if (!lamports || lamports <= 0) return;
+    if (lamports >= offer.price_lamports) return;
+    setSubmitting(true);
+    try {
+      const signer = await primaryWallet.getSigner();
+      const anchorWallet = {
+        publicKey: new PublicKey(primaryWallet.address),
+        signTransaction: signer.signTransaction.bind(signer),
+        signAllTransactions: signer.signAllTransactions.bind(signer),
+      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
+      await submitCounterOffer(connection, anchorWallet, offerId, lamports);
+      setSubmitted(true);
+      setCounterOfferOpen(false);
+      setCounterPrice("");
+      if (primaryWallet) {
+        getCounterOfferByBuyer(offerId, primaryWallet.address)
+          .then(setActiveCounterOffer)
+          .catch(console.error);
+      }
+    } catch (err) {
+      console.error("Failed to submit counter offer", err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <p className="text-sm text-gray-400">Loading…</p>
+      <div className={s.page}>
+        <div className={s.card}>
+          <div className={s.logoWrap}>
+            <img src="/favicon.svg" alt="ArcPay" className={s.logo} />
+          </div>
+          <p className={s.statusMessage}>Loading…</p>
+        </div>
       </div>
     );
   }
 
   if (!offer) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <p className="text-sm text-gray-400">Offer not found.</p>
+      <div className={s.page}>
+        <div className={s.card}>
+          <div className={s.logoWrap}>
+            <img src="/favicon.svg" alt="ArcPay" className={s.logo} />
+          </div>
+          <p className={s.statusMessage}>Offer not found.</p>
+        </div>
       </div>
     );
   }
 
-  const listing = offer.qr_listings;
   const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
-  const { label: statusLabel, className: statusClass } = statusConfig[
-    offer.status
-  ] ?? {
-    label: offer.status,
-    className: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-  };
-  const canBuy = offer.status === "active" && listing && !bought;
-
-  async function handleBuy() {
-    if (!listing) return;
-    if (!anchorWallet || !connected) return;
-    setBuyError(null);
-    setBuying(true);
-    try {
-      await acceptListing(connection, anchorWallet, listing.listing_pda);
-      setBought(true);
-    } catch (err) {
-      setBuyError(err instanceof Error ? err.message : "Transaction failed");
-    } finally {
-      setBuying(false);
-    }
-  }
+  const isAvailable = offer.status === "active";
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        {/* Image */}
-        <div className="w-full aspect-square rounded-t-2xl bg-gray-100 dark:bg-gray-800" />
-
-        {/* Card */}
-        <div className="bg-white dark:bg-gray-950 rounded-b-2xl border border-t-0 border-gray-200 dark:border-gray-700 px-5 py-6 flex flex-col gap-4">
-          {/* Title */}
-          <div>
-            <h1 className="text-xl font-bold text-purple-600 uppercase leading-tight tracking-tight">
-              {offer.name}
-            </h1>
-            <p className="text-xl font-bold text-gray-900 dark:text-gray-50 mt-2">
-              {priceSOL} <span className="text-base font-semibold">SOL</span>
-            </p>
+    <>
+      <div className={s.page}>
+        <div className={s.card}>
+          <div className={s.logoWrap}>
+            <img src="/favicon.svg" alt="ArcPay" className={s.logo} />
           </div>
 
-          {/* Description */}
-          {offer.description && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-              {offer.description}
-            </p>
-          )}
+          <div className={s.info}>
+            <h1 className={s.name}>{offer.name}</h1>
+            <p className={s.price}>{priceSOL} SOL</p>
+            {offer.description && (
+              <p className={s.description}>{offer.description}</p>
+            )}
+          </div>
 
-          {/* Status — only show if not active */}
-          {offer.status !== "active" && (
+          {!isAvailable ? (
             <span
-              className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${statusClass}`}
+              className={`${s.unavailableBadge} ${
+                offer.status === "paused"
+                  ? s.unavailablePaused
+                  : offer.status === "sold"
+                    ? s.unavailableSold
+                    : s.unavailableCanceled
+              }`}
             >
-              {statusLabel}
+              {offer.status === "paused"
+                ? "Paused"
+                : offer.status === "sold"
+                  ? "Sold out"
+                  : "Cancelled"}
             </span>
-          )}
-
-          {/* Action */}
-          {bought ? (
-            <p className="text-sm text-green-600 dark:text-green-400 font-medium py-2">
-              Payment sent! The seller will confirm your order.
-            </p>
-          ) : canBuy ? (
-            <>
+          ) : submitted ? (
+            <p className={s.successMessage}>Counter offer submitted!</p>
+          ) : (
+            <div className={s.actions}>
               {connected ? (
                 <button
+                  className={s.buyButton}
                   onClick={handleBuy}
                   disabled={buying}
-                  className="w-full py-3 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors mt-1"
                 >
-                  {buying ? "Confirm in wallet…" : "Buy"}
+                  {buying ? "Buying…" : "BUY"}
                 </button>
               ) : (
-                <WalletMultiButton
-                  style={{ width: "100%", justifyContent: "center" }}
-                />
+                <button
+                  className={s.connectButton}
+                  onClick={() => setShowAuthFlow(true)}
+                >
+                  Connect wallet
+                </button>
               )}
-              {buyError && (
-                <p className="text-xs text-red-500 mt-1">{buyError}</p>
+
+              {connected && activeCounterOffer && (
+                <div className={s.activeOfferRow}>
+                  <span className={s.activeOfferLabel}>
+                    Your active offer made:
+                  </span>
+                  <span className={s.activeOfferAmount}>
+                    {(activeCounterOffer.amount / 1_000_000_000).toFixed(2)} SOL
+                  </span>
+                </div>
               )}
-            </>
-          ) : (
-            <p className="text-xs text-gray-400 dark:text-gray-500 py-2">
-              {offer.status === "unlisted" || !listing
-                ? "This listing is not yet confirmed on-chain."
-                : offer.status === "sold"
-                  ? "This item has already been sold."
-                  : `This listing is currently ${offer.status}.`}
-            </p>
+
+              {connected && !activeCounterOffer && (
+                <>
+                  <div className={s.counterOfferHint}>
+                    <p className={s.counterOfferHintBold}>
+                      Not ready to pay full price?
+                    </p>
+                    <p className={s.counterOfferHintText}>
+                      You can submit an offer for this item at a price that
+                      works for you.
+                    </p>
+                  </div>
+                  <button
+                    className={s.createOfferButton}
+                    onClick={() => setCounterOfferOpen(true)}
+                  >
+                    Create offer
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>
-    </div>
+
+      {counterOfferOpen && (
+        <div
+          className={s.modalOverlay}
+          onClick={() => setCounterOfferOpen(false)}
+        >
+          <div className={s.modal} onClick={(e) => e.stopPropagation()}>
+            <h2 className={s.modalTitle}>Create offer</h2>
+            <p className={s.modalDescription}>
+              Submit an offer below. This is not a purchase - your offer will be
+              accepted automatically if it qualifies for an active discount, a
+              future marketing discount campaign or reviewed manually by the
+              merchant. You'll be notified before any payment is taken.
+            </p>
+            <button className={s.modalLearnMore} onClick={() => {}}>
+              Learn more about offers
+            </button>
+            <div className={s.modalField}>
+              <label className={s.modalLabel}>Offered price (SOL)</label>
+              <input
+                className={s.modalInput}
+                type="number"
+                step="0.0001"
+                min="0"
+                placeholder="0.00"
+                value={counterPrice}
+                onChange={(e) => setCounterPrice(e.target.value)}
+              />
+            </div>
+            <div className={s.modalActions}>
+              <button
+                className={s.modalCancelButton}
+                onClick={() => setCounterOfferOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className={s.modalSubmitButton}
+                disabled={
+                  !counterPrice ||
+                  parseFloat(counterPrice) <= 0 ||
+                  (!!offer &&
+                    Math.round(parseFloat(counterPrice) * 1_000_000_000) >=
+                      offer.price_lamports) ||
+                  submitting
+                }
+                onClick={handleSubmitCounterOffer}
+              >
+                {submitting ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

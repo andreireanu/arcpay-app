@@ -7,6 +7,11 @@ export async function getSession(): Promise<Session | null> {
   return data.session
 }
 
+export function getCurrentRole(): 'seller' | 'buyer' {
+  const role = localStorage.getItem('arcpay_role')
+  return role === 'buyer' ? 'buyer' : 'seller'
+}
+
 export function onAuthStateChange(callback: (session: Session | null) => void) {
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
     callback(session)
