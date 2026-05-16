@@ -6,7 +6,7 @@ import { useDynamicContext, getAuthToken } from "@dynamic-labs/sdk-react-core";
 import { isSolanaWallet } from "@dynamic-labs/solana-core";
 import { getOffer } from "../supabase/offers/offers";
 import { submitCounterOffer } from "../supabase/offers/counterOffers";
-import { getCounterOfferByBuyer } from "../supabase/offers/getCounterOffers";
+import { getCounterOfferByBuyer, watchCounterOfferStatuses, watchBuyerCounterOfferInsert } from "../supabase/offers/getCounterOffers";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
 import type { CounterOffer } from "../types/counterOffer";
 import { buy } from "../solana/instructions/buy";
@@ -49,7 +49,22 @@ export default function Pay() {
       .finally(() => {
         exchangingRef.current = false;
       });
-  }, [user, primaryWallet]);
+  }, [user, primaryWallet, offerId]);
+
+  useEffect(() => {
+    if (!activeCounterOffer) return
+    return watchCounterOfferStatuses([activeCounterOffer.id], (_id, status) => {
+      if (status === 'confirmed') setActiveCounterOffer(null)
+    })
+  }, [activeCounterOffer])
+
+  useEffect(() => {
+    if (!submitted || activeCounterOffer || !offerId || !primaryWallet) return
+    return watchBuyerCounterOfferInsert(offerId, primaryWallet.address, (counterOffer) => {
+      setActiveCounterOffer(counterOffer)
+      setSubmitted(false)
+    })
+  }, [submitted, activeCounterOffer, offerId, primaryWallet])
 
   async function handleBuy() {
     if (!connected || !primaryWallet || !offerId || buying) return;

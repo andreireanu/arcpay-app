@@ -5,7 +5,7 @@ export interface CounterOffer {
   tx_signature: string
   amount: number
   quantity: number
-  status: 'active' | 'canceled'
+  status: 'active' | 'canceled' | 'confirmed'
   created_at: string
   expiry_at: string
 }

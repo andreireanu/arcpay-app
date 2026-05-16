@@ -4,8 +4,14 @@ const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function base58Encode(bytes: Uint8Array): string {
   let n = bytes.reduce((acc, b) => acc * 256n + BigInt(b), 0n);
   const chars: string[] = [];
-  while (n > 0n) { chars.unshift(BASE58[Number(n % 58n)]); n /= 58n; }
-  for (const b of bytes) { if (b !== 0) break; chars.unshift("1"); }
+  while (n > 0n) {
+    chars.unshift(BASE58[Number(n % 58n)]);
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b !== 0) break;
+    chars.unshift("1");
+  }
   return chars.join("");
 }
 
@@ -46,7 +52,8 @@ Deno.serve(async (req) => {
 
   for (const tx of transactions) {
     const logs: string[] = tx.meta?.logMessages ?? tx.logs ?? [];
-    const txSignature: string = tx.signature ?? tx.transaction?.signatures?.[0] ?? "";
+    const txSignature: string =
+      tx.signature ?? tx.transaction?.signatures?.[0] ?? "";
 
     for (const log of logs) {
       if (!log.startsWith("Program data: ")) continue;
@@ -62,29 +69,38 @@ Deno.serve(async (req) => {
       const offerId = bytesToUuid(bytes.slice(8, 24));
       const buyerWallet = base58Encode(bytes.slice(24, 56));
       // bytes 56–88 are the seller wallet (skipped — derivable from qr_offers)
-      const sellerAmount = Number(new DataView(bytes.buffer, bytes.byteOffset + 88, 8).getBigUint64(0, true));
-      const feeAmount = Number(new DataView(bytes.buffer, bytes.byteOffset + 96, 8).getBigUint64(0, true));
+      const sellerAmount = Number(
+        new DataView(bytes.buffer, bytes.byteOffset + 88, 8).getBigUint64(
+          0,
+          true,
+        ),
+      );
+      const feeAmount = Number(
+        new DataView(bytes.buffer, bytes.byteOffset + 96, 8).getBigUint64(
+          0,
+          true,
+        ),
+      );
 
-      const { error: txError } = await supabase
-        .from("qr_transactions")
-        .insert({
-          offer_id: offerId,
-          buyer_wallet: buyerWallet,
-          tx_signature: txSignature,
-          seller_amount: sellerAmount,
-          fee_amount: feeAmount,
-          quantity: 1,
-        });
+      const { error: txError } = await supabase.from("qr_transactions").insert({
+        offer_id: offerId,
+        buyer_wallet: buyerWallet,
+        tx_signature: txSignature,
+        seller_amount: sellerAmount,
+        fee_amount: feeAmount,
+        quantity: 1,
+      });
       if (txError) {
         // code 23505 = unique_violation: Helius delivered this webhook twice, safe to ignore.
-        if (txError.code === "23505") console.warn("duplicate webhook delivery, skipping", txSignature);
+        if (txError.code === "23505")
+          console.warn("duplicate webhook delivery, skipping", txSignature);
         else console.error("transaction insert error", txError);
         continue;
       }
 
       const { error: qtyError } = await supabase.rpc(
-        "increment_offer_quantity_sold",
-        { p_offer_id: offerId },
+        "increment_offer_quantity_sold_by",
+        { p_offer_id: offerId, p_amount: 1 },
       );
       if (qtyError) console.error("quantity increment error", qtyError);
     }
