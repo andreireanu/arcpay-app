@@ -66,7 +66,7 @@ export default function Dashboard() {
         prev.map((o) => (o.id === offerId ? { ...o, ...update } : o))
       )
     })
-  }, [offers.map((o) => o.id).join(',')])
+  }, [offers])
 
   async function handleCreateOffer(name: string, description: string, priceLamports: number, quantity: number) {
     if (!walletAddress) return
