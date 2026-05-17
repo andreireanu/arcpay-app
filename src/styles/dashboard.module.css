@@ -899,8 +899,6 @@
     cursor: pointer;
     white-space: nowrap;
     transition: opacity 0.15s;
-    opacity: 0.35;
-    cursor: default;
 }
 
 .acceptAllButton:hover {

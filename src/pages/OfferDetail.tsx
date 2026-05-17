@@ -202,7 +202,8 @@ export default function OfferDetail() {
   }
 
   function handleAcceptAll() {
-    handleAccept(counterOffers.map((co) => co.id));
+    const activeCounterOffers = counterOffers.filter((co) => co.status === "active");
+    handleAccept(activeCounterOffers.map((co) => co.id));
   }
 
   function handleAcceptSelected() {
@@ -390,8 +391,7 @@ export default function OfferDetail() {
                     </button>
                     <button
                       className={s.acceptAllButton}
-                      // disabled={accepting}
-                      disabled={true}
+                      disabled={accepting}
                       onClick={handleAcceptAll}
                     >
                       {accepting ? "Accepting…" : "Accept all"}
