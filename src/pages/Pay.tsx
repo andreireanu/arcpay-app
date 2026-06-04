@@ -6,6 +6,7 @@ import { useDynamicContext, getAuthToken } from "@dynamic-labs/sdk-react-core";
 import { isSolanaWallet } from "@dynamic-labs/solana-core";
 import { getOffer } from "../supabase/offers/offers";
 import { submitCounterOffer } from "../supabase/offers/counterOffers";
+import { cancelCounterOffer } from "../supabase/offers/cancelCounterOffer";
 import { getCounterOfferByBuyer, watchCounterOfferStatuses, watchBuyerCounterOfferInsert } from "../supabase/offers/getCounterOffers";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
 import type { CounterOffer } from "../types/counterOffer";
@@ -22,8 +23,10 @@ export default function Pay() {
   const [buying, setBuying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [activeCounterOffer, setActiveCounterOffer] =
     useState<CounterOffer | null>(null);
+  const [counterOfferLoading, setCounterOfferLoading] = useState(false);
 
   const { connection } = useConnection();
   const { primaryWallet, setShowAuthFlow, user } = useDynamicContext();
@@ -40,21 +43,26 @@ export default function Pay() {
 
   useEffect(() => {
     const token = getAuthToken();
-    if (!user || !primaryWallet || !token || exchangingRef.current) return;
+    if (!user || !primaryWallet || !token || exchangingRef.current) {
+      setCounterOfferLoading(false);
+      return;
+    }
     exchangingRef.current = true;
+    setCounterOfferLoading(true);
     exchangeToken(token, primaryWallet.address, "buyer")
       .then(() => getCounterOfferByBuyer(offerId!, primaryWallet.address))
       .then(setActiveCounterOffer)
       .catch(console.error)
       .finally(() => {
         exchangingRef.current = false;
+        setCounterOfferLoading(false);
       });
   }, [user, primaryWallet, offerId]);
 
   useEffect(() => {
     if (!activeCounterOffer) return
     return watchCounterOfferStatuses([activeCounterOffer.id], (_id, status) => {
-      if (status === 'confirmed') setActiveCounterOffer(null)
+      if (status === 'confirmed' || status === 'canceled') setActiveCounterOffer(null)
     })
   }, [activeCounterOffer])
 
@@ -100,15 +108,29 @@ export default function Pay() {
       setSubmitted(true);
       setCounterOfferOpen(false);
       setCounterPrice("");
-      if (primaryWallet) {
-        getCounterOfferByBuyer(offerId, primaryWallet.address)
-          .then(setActiveCounterOffer)
-          .catch(console.error);
-      }
     } catch (err) {
       console.error("Failed to submit counter offer", err);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleCancelOffer() {
+    if (!activeCounterOffer || !connected || !primaryWallet || canceling) return;
+    setCanceling(true);
+    try {
+      const signer = await primaryWallet.getSigner();
+      const anchorWallet = {
+        publicKey: new PublicKey(primaryWallet.address),
+        signTransaction: signer.signTransaction.bind(signer),
+        signAllTransactions: signer.signAllTransactions.bind(signer),
+      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
+      await cancelCounterOffer(connection, anchorWallet, activeCounterOffer.ephemeral_id, offer!.seller_wallet!);
+      setActiveCounterOffer(null);
+    } catch (err) {
+      console.error("Failed to cancel offer", err);
+    } finally {
+      setCanceling(false);
     }
   }
 
@@ -159,13 +181,12 @@ export default function Pay() {
 
           {!isAvailable ? (
             <span
-              className={`${s.unavailableBadge} ${
-                offer.status === "paused"
-                  ? s.unavailablePaused
-                  : offer.status === "sold"
-                    ? s.unavailableSold
-                    : s.unavailableCanceled
-              }`}
+              className={`${s.unavailableBadge} ${offer.status === "paused"
+                ? s.unavailablePaused
+                : offer.status === "sold"
+                  ? s.unavailableSold
+                  : s.unavailableCanceled
+                }`}
             >
               {offer.status === "paused"
                 ? "Paused"
@@ -194,7 +215,7 @@ export default function Pay() {
                 </button>
               )}
 
-              {connected && activeCounterOffer && (
+              {connected && !counterOfferLoading && activeCounterOffer && (
                 <div className={s.activeOfferRow}>
                   <span className={s.activeOfferLabel}>
                     Your active offer made:
@@ -202,10 +223,19 @@ export default function Pay() {
                   <span className={s.activeOfferAmount}>
                     {(activeCounterOffer.amount / 1_000_000_000).toFixed(2)} SOL
                   </span>
+                  <div className={s.activeOfferActions}>
+                    <button
+                      className={s.inlineActionText}
+                      onClick={handleCancelOffer}
+                      disabled={canceling}
+                    >
+                      {canceling ? "Canceling..." : "Cancel"}
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {connected && !activeCounterOffer && (
+              {connected && !counterOfferLoading && !activeCounterOffer && (
                 <>
                   <div className={s.counterOfferHint}>
                     <p className={s.counterOfferHintBold}>
@@ -242,7 +272,7 @@ export default function Pay() {
               future marketing discount campaign or reviewed manually by the
               merchant. You'll be notified before any payment is taken.
             </p>
-            <button className={s.modalLearnMore} onClick={() => {}}>
+            <button className={s.modalLearnMore} onClick={() => { }}>
               Learn more about offers
             </button>
             <div className={s.modalField}>
@@ -271,7 +301,7 @@ export default function Pay() {
                   parseFloat(counterPrice) <= 0 ||
                   (!!offer &&
                     Math.round(parseFloat(counterPrice) * 1_000_000_000) >=
-                      offer.price_lamports) ||
+                    offer.price_lamports) ||
                   submitting
                 }
                 onClick={handleSubmitCounterOffer}

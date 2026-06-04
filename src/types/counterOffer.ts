@@ -1,6 +1,7 @@
 export interface CounterOffer {
   id: string
   offer_id: string
+  ephemeral_id: string
   buyer_wallet: string
   tx_signature: string
   amount: number

@@ -1,4 +1,5 @@
 -- ArcPay — full schema (consolidated, replaces all prior migrations)
+DROP TABLE IF EXISTS qr_accepted_counter CASCADE;
 DROP TABLE IF EXISTS qr_counteroffers CASCADE;
 DROP TABLE IF EXISTS qr_ephemeral CASCADE;
 DROP TABLE IF EXISTS qr_transactions CASCADE;
@@ -7,6 +8,7 @@ DROP TABLE IF EXISTS buyers CASCADE;
 DROP TABLE IF EXISTS sellers CASCADE;
 DROP TABLE IF EXISTS products CASCADE;
 DROP FUNCTION IF EXISTS increment_offer_quantity_sold(uuid);
+DROP FUNCTION IF EXISTS increment_offer_quantity_sold_by(uuid, integer);
 
 -- ─── products ────────────────────────────────────────────────────────────────
 CREATE TABLE public.products (
@@ -138,17 +140,28 @@ CREATE POLICY "sellers can read own transactions"
     )
   );
 
+-- ─── qr_ephemeral ────────────────────────────────────────────────────────────
+CREATE TABLE public.qr_ephemeral (
+  id             uuid        PRIMARY KEY, -- this maps to your ephemeral_uuid
+  offer_id       uuid        NOT NULL REFERENCES qr_offers(id),
+  status         text        NOT NULL DEFAULT 'pending',
+  created_at     timestamptz DEFAULT now()
+);
+
+ALTER TABLE qr_ephemeral ENABLE ROW LEVEL SECURITY;
+
 -- ─── qr_counteroffers ────────────────────────────────────────────────────────
 CREATE TABLE public.qr_counteroffers (
-  id           uuid        NOT NULL DEFAULT gen_random_uuid(),
-  offer_id     uuid        NOT NULL REFERENCES qr_offers(id),
-  buyer_wallet text        NOT NULL,
-  tx_signature text        NOT NULL UNIQUE,
-  amount       bigint      NOT NULL,
-  quantity     integer     NOT NULL DEFAULT 1,
-  status       text        NOT NULL DEFAULT 'active',
-  expiry_at    timestamptz NOT NULL DEFAULT now() + INTERVAL '3 months',
-  created_at   timestamptz DEFAULT now(),
+  id             uuid        NOT NULL DEFAULT gen_random_uuid(),
+  offer_id       uuid        NOT NULL REFERENCES qr_offers(id),
+  ephemeral_id   uuid        NOT NULL,
+  buyer_wallet   text        NOT NULL,
+  tx_signature   text        NOT NULL UNIQUE,
+  amount         bigint      NOT NULL,
+  quantity       integer     NOT NULL DEFAULT 1,
+  status         text        NOT NULL DEFAULT 'active',
+  expiry_at      timestamptz NOT NULL DEFAULT now() + INTERVAL '3 months',
+  created_at     timestamptz DEFAULT now(),
   CONSTRAINT qr_counteroffers_pkey PRIMARY KEY (id)
 );
 
@@ -173,18 +186,23 @@ CREATE POLICY "buyers can read own counteroffers"
     buyer_wallet = (auth.jwt() -> 'user_metadata' ->> 'wallet_address')
   );
 
--- ─── qr_ephemeral ────────────────────────────────────────────────────────────
-CREATE TABLE public.qr_ephemeral (
-  id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  offer_id       uuid        NOT NULL REFERENCES qr_offers(id),
-  ephemeral_uuid uuid        NOT NULL UNIQUE,
-  status         text        NOT NULL DEFAULT 'pending',
-  created_at     timestamptz DEFAULT now()
+-- ─── qr_accepted_counter ─────────────────────────────────────────────────────
+-- Ephemeral witness table for a seller accepting one or more counter offers.
+-- Created when the seller initiates acceptance; updated by the webhook on
+-- settlement. Mirrors the lifecycle pattern of qr_ephemeral.
+
+CREATE TABLE public.qr_accepted_counter (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  offers     jsonb       NOT NULL,                          -- array of qr_counteroffers IDs
+  status     text        NOT NULL DEFAULT 'pending',        -- pending | completed | failed
+  created_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE qr_ephemeral ENABLE ROW LEVEL SECURITY;
+-- RLS enabled with no permissive policies — only the service role (backend)
+-- can read or write this table. Anon and authenticated roles are denied.
+ALTER TABLE qr_accepted_counter ENABLE ROW LEVEL SECURITY;
 
--- ─── Helper function ─────────────────────────────────────────────────────────
+-- ─── Helper functions ────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION increment_offer_quantity_sold(p_offer_id uuid)
 RETURNS void AS $$
 BEGIN
@@ -193,6 +211,20 @@ BEGIN
     quantity_sold = quantity_sold + 1,
     status = CASE
       WHEN quantity_sold + 1 >= quantity THEN 'sold'
+      ELSE status
+    END
+  WHERE id = p_offer_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION increment_offer_quantity_sold_by(p_offer_id uuid, p_amount integer)
+RETURNS void AS $$
+BEGIN
+  UPDATE qr_offers
+  SET
+    quantity_sold = quantity_sold + p_amount,
+    status = CASE
+      WHEN quantity_sold + p_amount >= quantity THEN 'sold'
       ELSE status
     END
   WHERE id = p_offer_id;

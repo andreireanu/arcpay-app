@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
 
   const { error: insertError } = await supabase
     .from("qr_ephemeral")
-    .insert({ offer_id, ephemeral_uuid: ephemeralUuid, status: "pending" });
+    .insert({ id: ephemeralUuid, offer_id, status: "pending" });
   if (insertError) {
     console.error("qr_ephemeral insert error", insertError);
     return new Response("Internal error", { status: 500, headers: CORS });
