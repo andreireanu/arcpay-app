@@ -332,6 +332,34 @@
   flex: 1;
 }
 
+.activeOfferActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.inlineActionText {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-yellow);
+  text-decoration: underline;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.inlineActionText:hover {
+  opacity: 0.8;
+}
+
+.inlineActionText:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 
 .unavailableBadge {
   align-self: center;

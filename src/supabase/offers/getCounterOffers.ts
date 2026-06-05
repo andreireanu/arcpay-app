@@ -6,6 +6,7 @@ export async function getCounterOffersByOffer(offerId: string): Promise<CounterO
     .from('qr_counteroffers')
     .select('*')
     .eq('offer_id', offerId)
+    .eq('status', 'active')
     .order('created_at', { ascending: false })
   if (error) throw error
   return data as CounterOffer[]

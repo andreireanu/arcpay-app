@@ -90,9 +90,13 @@ export default function OfferDetail() {
     const ids = counterOfferIdKey ? counterOfferIdKey.split(",") : [];
     if (ids.length === 0) return;
     return watchCounterOfferStatuses(ids, (id, status) => {
-      setCounterOffers((prev) =>
-        prev.map((co) => (co.id === id ? { ...co, status } : co)),
-      );
+      if (status === 'canceled') {
+        setCounterOffers((prev) => prev.filter((co) => co.id !== id));
+      } else {
+        setCounterOffers((prev) =>
+          prev.map((co) => (co.id === id ? { ...co, status } : co)),
+        );
+      }
     });
   }, [counterOfferIdKey]);
 

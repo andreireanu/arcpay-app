@@ -13,7 +13,9 @@ function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 function bytesToUuid(bytes: Uint8Array): string {
-  const h = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const h = Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
@@ -21,8 +23,14 @@ const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function base58Encode(bytes: Uint8Array): string {
   let n = bytes.reduce((acc, b) => acc * 256n + BigInt(b), 0n);
   const chars: string[] = [];
-  while (n > 0n) { chars.unshift(BASE58[Number(n % 58n)]); n /= 58n; }
-  for (const b of bytes) { if (b !== 0) break; chars.unshift("1"); }
+  while (n > 0n) {
+    chars.unshift(BASE58[Number(n % 58n)]);
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b !== 0) break;
+    chars.unshift("1");
+  }
   return chars.join("");
 }
 
@@ -44,7 +52,8 @@ Deno.serve(async (req) => {
 
   for (const tx of transactions) {
     const logs: string[] = tx.meta?.logMessages ?? tx.logs ?? [];
-    const txSignature: string = tx.signature ?? tx.transaction?.signatures?.[0] ?? "";
+    const txSignature: string =
+      tx.signature ?? tx.transaction?.signatures?.[0] ?? "";
 
     for (const log of logs) {
       if (!log.startsWith("Program data: ")) continue;
@@ -59,17 +68,31 @@ Deno.serve(async (req) => {
 
       const ephemeralUuid = bytesToUuid(bytes.slice(8, 24));
       const buyerWallet = base58Encode(bytes.slice(24, 56));
-      const amount = Number(new DataView(bytes.buffer, bytes.byteOffset + 56, 8).getBigUint64(0, true));
+      const amount = Number(
+        new DataView(bytes.buffer, bytes.byteOffset + 56, 8).getBigUint64(
+          0,
+          true,
+        ),
+      );
 
       // Look up the real offer_id from the ephemeral uuid mapping.
       const { data: ephemeral, error: lookupError } = await supabase
         .from("qr_ephemeral")
         .select("id, offer_id")
-        .eq("ephemeral_uuid", ephemeralUuid)
+        .eq("id", ephemeralUuid)
         .maybeSingle();
 
       if (lookupError || !ephemeral) {
-        console.error("qr_ephemeral lookup failed", ephemeralUuid, lookupError);
+        const { data: existing } = await supabase
+          .from("qr_counteroffers")
+          .select("id")
+          .eq("tx_signature", txSignature)
+          .maybeSingle();
+        if (existing) {
+          console.warn("duplicate webhook delivery, skipping", txSignature);
+        } else {
+          console.error("qr_ephemeral lookup failed", ephemeralUuid, lookupError);
+        }
         continue;
       }
 
@@ -78,25 +101,27 @@ Deno.serve(async (req) => {
         .from("qr_counteroffers")
         .insert({
           offer_id: ephemeral.offer_id,
+          ephemeral_id: ephemeral.id,
           buyer_wallet: buyerWallet,
           tx_signature: txSignature,
           amount,
         });
 
       if (insertError) {
-        if (insertError.code === "23505") console.warn("duplicate webhook delivery, skipping", txSignature);
+        if (insertError.code === "23505")
+          console.warn("duplicate webhook delivery, skipping", txSignature);
         else console.error("qr_counteroffers insert error", insertError);
         continue;
       }
 
-      // Mark ephemeral as confirmed only after successful counter offer insert.
-      const { error: updateError } = await supabase
+      // Delete the ephemeral row now that it has been consumed.
+      const { error: deleteError } = await supabase
         .from("qr_ephemeral")
-        .update({ status: "confirmed" })
+        .delete()
         .eq("id", ephemeral.id);
 
-      if (updateError) console.error("qr_ephemeral update error", updateError);
-      else console.log("confirmed ephemeral", ephemeralUuid, "offer", ephemeral.offer_id);
+      if (deleteError) console.error("qr_ephemeral delete error", deleteError);
+      else console.log("deleted ephemeral", ephemeralUuid, "offer", ephemeral.offer_id);
     }
   }
 
