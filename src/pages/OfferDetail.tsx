@@ -90,7 +90,7 @@ export default function OfferDetail() {
     const ids = counterOfferIdKey ? counterOfferIdKey.split(",") : [];
     if (ids.length === 0) return;
     return watchCounterOfferStatuses(ids, (id, status) => {
-      if (status === 'canceled') {
+      if (status === "canceled") {
         setCounterOffers((prev) => prev.filter((co) => co.id !== id));
       } else {
         setCounterOffers((prev) =>
@@ -206,7 +206,9 @@ export default function OfferDetail() {
   }
 
   function handleAcceptAll() {
-    const activeCounterOffers = counterOffers.filter((co) => co.status === "active");
+    const activeCounterOffers = counterOffers.filter(
+      (co) => co.status === "active",
+    );
     handleAccept(activeCounterOffers.map((co) => co.id));
   }
 
@@ -403,53 +405,58 @@ export default function OfferDetail() {
                   </div>
                 </div>
               </div>
-              {selectedIds.size > 0 &&
-                (() => {
-                  const selected = counterOffers.filter((co) =>
-                    selectedIds.has(co.id),
-                  );
-                  const totalAmount = selected.reduce(
-                    (sum, co) => sum + co.amount,
-                    0,
-                  );
-                  const totalQty = selected.reduce(
-                    (sum, co) => sum + co.quantity,
-                    0,
-                  );
-                  const avgPrice = totalQty > 0 ? totalAmount / totalQty : 0;
-                  return (
-                    <div className={s.selectionSummary}>
-                      <div className={s.selectionSummaryItem}>
-                        <span className={s.selectionSummaryLabel}>
-                          Selected offers
-                        </span>
-                        <span className={s.selectionSummaryValue}>
-                          {selected.length}
-                        </span>
-                      </div>
-                      <div className={s.selectionSummarySep} />
-                      <div className={s.selectionSummaryItem}>
-                        <span className={s.selectionSummaryLabel}>
-                          Avg price / product
-                        </span>
-                        <span className={s.selectionSummaryValue}>
-                          {(avgPrice / 1_000_000_000).toFixed(4)} SOL
-                        </span>
-                      </div>
-                      <div className={s.selectionSummarySep} />
-                      <div className={s.selectionSummaryItem}>
-                        <span className={s.selectionSummaryLabel}>
-                          You will receive
-                        </span>
-                        <span
-                          className={`${s.selectionSummaryValue} ${s.selectionSummaryTotal}`}
-                        >
-                          {(totalAmount / 1_000_000_000).toFixed(4)} SOL
-                        </span>
-                      </div>
+              {(() => {
+                const hasSelection = selectedIds.size > 0;
+                const activeOffers = counterOffers.filter(
+                  (co) => co.status === "active",
+                );
+                const displayed = hasSelection
+                  ? counterOffers.filter((co) => selectedIds.has(co.id))
+                  : activeOffers;
+                const totalAmount = displayed.reduce(
+                  (sum, co) => sum + co.amount,
+                  0,
+                );
+                const totalQty = displayed.reduce(
+                  (sum, co) => sum + co.quantity,
+                  0,
+                );
+                const avgPrice = totalQty > 0 ? totalAmount / totalQty : 0;
+                return (
+                  <div className={s.selectionSummary}>
+                    <div className={s.selectionSummaryItem}>
+                      <span className={s.selectionSummaryLabel}>
+                        {hasSelection
+                          ? "Selected offers"
+                          : "If accepting all offers"}
+                      </span>
+                      <span className={s.selectionSummaryValue}>
+                        {displayed.length}
+                      </span>
                     </div>
-                  );
-                })()}
+                    <div className={s.selectionSummarySep} />
+                    <div className={s.selectionSummaryItem}>
+                      <span className={s.selectionSummaryLabel}>
+                        Avg price / product
+                      </span>
+                      <span className={s.selectionSummaryValue}>
+                        {(avgPrice / 1_000_000_000).toFixed(4)} SOL
+                      </span>
+                    </div>
+                    <div className={s.selectionSummarySep} />
+                    <div className={s.selectionSummaryItem}>
+                      <span className={s.selectionSummaryLabel}>
+                        You will receive
+                      </span>
+                      <span
+                        className={`${s.selectionSummaryValue} ${s.selectionSummaryTotal}`}
+                      >
+                        {(totalAmount / 1_000_000_000).toFixed(4)} SOL
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
               {[...counterOffers]
                 .sort((a, b) => {
                   if (a.status === "confirmed" && b.status !== "confirmed")
