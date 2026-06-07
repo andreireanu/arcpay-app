@@ -9,6 +9,7 @@ import {
   getOffer,
   pauseOffer,
   resumeOffer,
+  cancelOffer,
   watchOfferStatuses,
 } from "../supabase/offers/offers";
 import {
@@ -173,9 +174,23 @@ export default function OfferDetail() {
   }
 
   async function handleCancelConfirm() {
-    if (!offer || !primaryWallet || !isSolanaWallet(primaryWallet) || canceling) return;
+    if (!offer || canceling) return;
     setCanceling(true);
     try {
+      const activeCounterOffers = counterOffers.filter(
+        (co) => co.status === "active",
+      );
+
+      if (activeCounterOffers.length === 0) {
+        // Nothing to refund — skip the on-chain tx and mark canceled off-chain.
+        await cancelOffer(offer.id);
+        setOffer((prev) => (prev ? { ...prev, status: "canceled" } : prev));
+        setCancelModalOpen(false);
+        return;
+      }
+
+      // Active counter offers exist — go on-chain so the webhook refunds them.
+      if (!primaryWallet || !isSolanaWallet(primaryWallet)) return;
       const signer = await primaryWallet.getSigner();
       const anchorWallet = {
         publicKey: new PublicKey(primaryWallet.address),
@@ -185,7 +200,7 @@ export default function OfferDetail() {
       await sellerCancelOffer(connection, anchorWallet, offer.id);
       setCancelModalOpen(false);
     } catch (err) {
-      console.error("Failed to cancel offer on-chain", err);
+      console.error("Failed to cancel offer", err);
       try {
         await resumeOffer(offer.id);
         setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));

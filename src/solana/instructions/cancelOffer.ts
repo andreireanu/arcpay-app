@@ -25,7 +25,7 @@ export async function cancelOffer(
 
   const program = getProgram(connection, wallet)
   const cancelIx = await program.methods
-    .cancelOffer(Array.from(uuidBytes))
+    .buyerCancelOffer(Array.from(uuidBytes))
     .accounts({
       buyer: wallet.publicKey,
       seller: sellerPubkey,

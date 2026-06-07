@@ -1,5 +1,4 @@
-import { Buffer } from 'buffer/'
-import { PublicKey, Transaction } from '@solana/web3.js'
+import { Transaction } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
 import type { AnchorWallet } from '@solana/wallet-adapter-react'
 import { getProgram } from '../program'

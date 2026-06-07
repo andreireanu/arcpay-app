@@ -62,7 +62,7 @@ export default function Pay() {
   useEffect(() => {
     if (!activeCounterOffer) return
     return watchCounterOfferStatuses([activeCounterOffer.id], (_id, status) => {
-      if (status === 'confirmed' || status === 'canceled') setActiveCounterOffer(null)
+      if (status === 'confirmed' || status === 'buyer_canceled' || status === 'seller_canceled') setActiveCounterOffer(null)
     })
   }, [activeCounterOffer])
 
@@ -221,7 +221,7 @@ export default function Pay() {
                     Your active offer made:
                   </span>
                   <span className={s.activeOfferAmount}>
-                    {(activeCounterOffer.amount / 1_000_000_000).toFixed(2)} SOL
+                    {(activeCounterOffer.amount / 1_000_000_000).toFixed(4)} SOL
                   </span>
                   <div className={s.activeOfferActions}>
                     <button
