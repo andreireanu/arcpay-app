@@ -91,6 +91,94 @@
       ]
     },
     {
+      "name": "admin_refund_offer",
+      "discriminator": [
+        121,
+        27,
+        20,
+        231,
+        141,
+        218,
+        240,
+        171
+      ],
+      "accounts": [
+        {
+          "name": "backend",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "offer_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "uuid"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyer",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "None for the accepted offer case (amount already paid to seller, only rent returned).",
+            "Some for the listing cancel case (amount + rent returned to buyer)."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "uuid",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "buy",
       "discriminator": [
         102,
@@ -165,16 +253,16 @@
       ]
     },
     {
-      "name": "cancel_offer",
+      "name": "buyer_cancel_offer",
       "discriminator": [
-        92,
-        203,
-        223,
-        40,
-        92,
-        89,
-        53,
-        119
+        190,
+        124,
+        112,
+        104,
+        114,
+        127,
+        3,
+        249
       ],
       "accounts": [
         {
@@ -404,6 +492,37 @@
       ]
     },
     {
+      "name": "seller_cancel_offer",
+      "discriminator": [
+        100,
+        185,
+        32,
+        44,
+        237,
+        81,
+        183,
+        64
+      ],
+      "accounts": [
+        {
+          "name": "seller",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "offer_id",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "withdraw_commission",
       "discriminator": [
         136,
@@ -508,6 +627,19 @@
       ]
     },
     {
+      "name": "BuyerOfferCanceled",
+      "discriminator": [
+        115,
+        208,
+        87,
+        187,
+        108,
+        51,
+        209,
+        144
+      ]
+    },
+    {
       "name": "OfferAccepted",
       "discriminator": [
         81,
@@ -521,16 +653,16 @@
       ]
     },
     {
-      "name": "OfferCanceled",
+      "name": "OfferAdminRefunded",
       "discriminator": [
-        22,
-        24,
-        38,
-        160,
-        119,
-        217,
-        227,
-        156
+        125,
+        70,
+        31,
+        164,
+        58,
+        55,
+        58,
+        39
       ]
     },
     {
@@ -544,6 +676,19 @@
         45,
         157,
         87
+      ]
+    },
+    {
+      "name": "SellerOfferCanceled",
+      "discriminator": [
+        78,
+        227,
+        163,
+        85,
+        80,
+        95,
+        88,
+        176
       ]
     },
     {
@@ -661,6 +806,39 @@
       }
     },
     {
+      "name": "BuyerOfferCanceled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "uuid",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Config",
       "type": {
         "kind": "struct",
@@ -710,7 +888,7 @@
       }
     },
     {
-      "name": "OfferCanceled",
+      "name": "OfferAdminRefunded",
       "type": {
         "kind": "struct",
         "fields": [
@@ -791,6 +969,31 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SellerOfferCanceled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "offer_id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }

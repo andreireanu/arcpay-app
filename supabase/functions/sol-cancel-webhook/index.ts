@@ -1,0 +1,191 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+} from "npm:@solana/web3.js@1";
+import {
+  BATCH_SIZE,
+  NETWORK_FEE_PER_TX,
+  sendAdminRefunds,
+} from "../_shared/adminRefundOffer.ts";
+
+async function getDiscriminator(eventName: string): Promise<Uint8Array> {
+  const hash = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`event:${eventName}`),
+  );
+  return new Uint8Array(hash, 0, 8);
+}
+
+function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+function bytesToUuid(bytes: Uint8Array): string {
+  const h = Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
+const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function base58Encode(bytes: Uint8Array): string {
+  let n = bytes.reduce((acc, b) => acc * 256n + BigInt(b), 0n);
+  const chars: string[] = [];
+  while (n > 0n) {
+    chars.unshift(BASE58[Number(n % 58n)]);
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b !== 0) break;
+    chars.unshift("1");
+  }
+  return chars.join("");
+}
+
+Deno.serve(async (req) => {
+  const secret = Deno.env.get("HELIUS_WEBHOOK_SECRET");
+  if (secret && req.headers.get("authorization") !== secret) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const payload = await req.json();
+  const transactions = Array.isArray(payload) ? payload : [payload];
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  const buyerDisc = await getDiscriminator("BuyerOfferCanceled");
+  const sellerDisc = await getDiscriminator("SellerOfferCanceled");
+
+  for (const tx of transactions) {
+    const logs: string[] = tx.meta?.logMessages ?? tx.logs ?? [];
+
+    for (const log of logs) {
+      if (!log.startsWith("Program data: ")) continue;
+
+      const bytes = Uint8Array.from(
+        atob(log.slice("Program data: ".length)),
+        (c) => c.charCodeAt(0),
+      );
+
+      if (bytes.length < 8) continue;
+      const disc = bytes.slice(0, 8);
+
+      // BuyerOfferCanceled: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 amount + 8 timestamp = 104 bytes
+      if (bytes.length >= 104 && arraysEqual(disc, buyerDisc)) {
+        const ephemeralUuid = bytesToUuid(bytes.slice(8, 24));
+
+        const { error } = await supabase
+          .from("qr_counteroffers")
+          .update({ status: "buyer_canceled", rent_returned: true })
+          .eq("ephemeral_id", ephemeralUuid);
+
+        if (error)
+          console.error("buyer_canceled update error", ephemeralUuid, error);
+        else console.log("buyer_canceled", ephemeralUuid);
+        continue;
+      }
+
+      // SellerOfferCanceled: 8 disc + 16 offer_id + 32 seller + 8 timestamp = 64 bytes
+      if (bytes.length >= 64 && arraysEqual(disc, sellerDisc)) {
+        const offerIdUuid = bytesToUuid(bytes.slice(8, 24));
+        const sellerWallet = base58Encode(bytes.slice(24, 56));
+
+        const { data: counterOffers, error: fetchError } = await supabase
+          .from("qr_counteroffers")
+          .select("ephemeral_id, buyer_wallet")
+          .eq("offer_id", offerIdUuid)
+          .eq("status", "active");
+
+        if (fetchError) {
+          console.error(
+            "qr_counteroffers fetch error",
+            offerIdUuid,
+            fetchError,
+          );
+          continue;
+        }
+
+        const { error: offerUpdateError } = await supabase
+          .from("qr_offers")
+          .update({ status: "canceled" })
+          .eq("id", offerIdUuid);
+
+        if (offerUpdateError)
+          console.error(
+            "qr_offers update error",
+            offerIdUuid,
+            offerUpdateError,
+          );
+
+        if (!counterOffers || counterOffers.length === 0) {
+          console.log("no active counter offers for offer", offerIdUuid);
+          continue;
+        }
+
+        const { error: updateError } = await supabase
+          .from("qr_counteroffers")
+          .update({ status: "seller_canceled" })
+          .in(
+            "ephemeral_id",
+            counterOffers.map((co) => co.ephemeral_id),
+          );
+
+        if (updateError)
+          console.error(
+            "qr_counteroffers update error",
+            offerIdUuid,
+            updateError,
+          );
+
+        const connection = new Connection(Deno.env.get("SOLANA_RPC_URL")!, {
+          commitment: "confirmed",
+          fetch,
+        });
+        const keypairBytes = new Uint8Array(
+          JSON.parse(Deno.env.get("BACKEND_KEYPAIR")!),
+        );
+        const backendKeypair = Keypair.fromSecretKey(keypairBytes);
+        const programId = new PublicKey(Deno.env.get("PROGRAM_ID")!);
+
+        const backendBalance = await connection.getBalance(
+          backendKeypair.publicKey,
+        );
+        const numBatches = Math.ceil(counterOffers.length / BATCH_SIZE);
+        const requiredLamports = numBatches * NETWORK_FEE_PER_TX;
+        if (backendBalance < requiredLamports) {
+          console.error(
+            "backend wallet underfunded — admin refunds will fail",
+            backendKeypair.publicKey.toBase58(),
+            "balance",
+            backendBalance,
+            "needed(approx)",
+            requiredLamports,
+          );
+        }
+
+        const { signatures, errors } = await sendAdminRefunds(
+          connection,
+          backendKeypair,
+          programId,
+          counterOffers.map((co) => ({
+            ephemeralId: co.ephemeral_id,
+            buyerWallet: co.buyer_wallet,
+            sellerWallet,
+          })),
+        );
+
+        if (signatures.length)
+          console.log("admin refunds sent", offerIdUuid, signatures);
+        if (errors.length)
+          console.error("admin refund errors", offerIdUuid, errors);
+      }
+    }
+  }
+
+  return new Response("ok", { status: 200 });
+});
