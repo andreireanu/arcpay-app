@@ -1,4 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1";
+import {
+  BATCH_SIZE,
+  NETWORK_FEE_PER_TX,
+  sendAdminRefunds,
+} from "../_shared/adminRefundOffer.ts";
 
 async function offerAcceptedDiscriminator(): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(
@@ -27,6 +33,7 @@ Deno.serve(async (req) => {
 
   const payload = await req.json();
   const transactions = Array.isArray(payload) ? payload : [payload];
+  console.log("sol-counter-webhook received", transactions.length, "tx(s)");
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -50,6 +57,7 @@ Deno.serve(async (req) => {
       if (bytes.length < 72 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
 
       const ephemeralId = bytesToUuid(bytes.slice(8, 24));
+      console.log("offer_accepted event", ephemeralId);
 
       // Fetch the witness row to get the list of counter offer IDs
       const { data: witness, error: witnessError } = await supabase
@@ -96,26 +104,69 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Get offer id and increment bought quantity
+      // Fetch the confirmed counter offers' details (offer_id for the quantity
+      // bump, ephemeral_id + buyer_wallet for the rent refund).
       const { data: counteroffers_data, error: offerIdError } = await supabase
         .from("qr_counteroffers")
-        .select("offer_id")
-        .eq("id", counterOfferIds[0])
-        .single();
+        .select("ephemeral_id, buyer_wallet, offer_id")
+        .in("id", counterOfferIds);
 
-      if (offerIdError) {
-        console.error("qr_counteroffers get offer id error", offerIdError);
+      if (offerIdError || !counteroffers_data || counteroffers_data.length === 0) {
+        console.error("qr_counteroffers details fetch error", offerIdError);
         continue;
       }
 
       const { error: qtyError } = await supabase.rpc(
         "increment_offer_quantity_sold_by",
         {
-          p_offer_id: counteroffers_data.offer_id,
+          p_offer_id: counteroffers_data[0].offer_id,
           p_amount: counterOfferIds.length,
         },
       );
       if (qtyError) console.error("quantity increment error", qtyError);
+
+      // Return the offer_record rent to each buyer. vault = None (sellerWallet
+      // omitted): the offer amount already moved to the seller on accept, so only
+      // the rent is refunded. Emits OfferAdminRefunded → sol-adminRefund-webhook
+      // flips rent_returned = true.
+      const connection = new Connection(Deno.env.get("SOLANA_RPC_URL")!, {
+        commitment: "confirmed",
+        fetch,
+      });
+      const backendKeypair = Keypair.fromSecretKey(
+        new Uint8Array(JSON.parse(Deno.env.get("BACKEND_KEYPAIR")!)),
+      );
+      const programId = new PublicKey(Deno.env.get("PROGRAM_ID")!);
+
+      const backendBalance = await connection.getBalance(
+        backendKeypair.publicKey,
+      );
+      const numBatches = Math.ceil(counteroffers_data.length / BATCH_SIZE);
+      const requiredLamports = numBatches * NETWORK_FEE_PER_TX;
+      if (backendBalance < requiredLamports) {
+        console.error(
+          "backend wallet underfunded — rent refunds will fail",
+          backendKeypair.publicKey.toBase58(),
+          "balance",
+          backendBalance,
+          "needed(approx)",
+          requiredLamports,
+        );
+      }
+
+      const { signatures, errors } = await sendAdminRefunds(
+        connection,
+        backendKeypair,
+        programId,
+        counteroffers_data.map((co) => ({
+          ephemeralId: co.ephemeral_id,
+          buyerWallet: co.buyer_wallet,
+        })),
+      );
+
+      if (signatures.length)
+        console.log("rent refunds sent", ephemeralId, signatures);
+      if (errors.length) console.error("rent refund errors", ephemeralId, errors);
 
       console.log(
         "confirmed accepted_counter",

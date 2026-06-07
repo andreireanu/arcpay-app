@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
 
   const payload = await req.json();
   const transactions = Array.isArray(payload) ? payload : [payload];
+  console.log("sol-adminRefund-webhook received", transactions.length, "tx(s)");
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -48,6 +49,7 @@ Deno.serve(async (req) => {
       if (bytes.length < 104 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
 
       const ephemeralUuid = bytesToUuid(bytes.slice(8, 24));
+      console.log("offer_admin_refunded event", ephemeralUuid);
 
       const { error } = await supabase
         .from("qr_counteroffers")

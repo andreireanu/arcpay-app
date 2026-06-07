@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
 
   const payload = await req.json();
   const transactions = Array.isArray(payload) ? payload : [payload];
+  console.log("sol-cancel-webhook received", transactions.length, "tx(s)");
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -78,6 +79,7 @@ Deno.serve(async (req) => {
       // BuyerOfferCanceled: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 amount + 8 timestamp = 104 bytes
       if (bytes.length >= 104 && arraysEqual(disc, buyerDisc)) {
         const ephemeralUuid = bytesToUuid(bytes.slice(8, 24));
+        console.log("buyer_cancel event", ephemeralUuid);
 
         const { error } = await supabase
           .from("qr_counteroffers")
@@ -94,6 +96,7 @@ Deno.serve(async (req) => {
       if (bytes.length >= 64 && arraysEqual(disc, sellerDisc)) {
         const offerIdUuid = bytesToUuid(bytes.slice(8, 24));
         const sellerWallet = base58Encode(bytes.slice(24, 56));
+        console.log("seller_cancel event", offerIdUuid, "seller", sellerWallet);
 
         const { data: counterOffers, error: fetchError } = await supabase
           .from("qr_counteroffers")
@@ -121,6 +124,7 @@ Deno.serve(async (req) => {
             offerIdUuid,
             offerUpdateError,
           );
+        else console.log("offer marked canceled", offerIdUuid);
 
         if (!counterOffers || counterOffers.length === 0) {
           console.log("no active counter offers for offer", offerIdUuid);
@@ -140,6 +144,12 @@ Deno.serve(async (req) => {
             "qr_counteroffers update error",
             offerIdUuid,
             updateError,
+          );
+        else
+          console.log(
+            "counter offers marked seller_canceled",
+            offerIdUuid,
+            counterOffers.length,
           );
 
         const connection = new Connection(Deno.env.get("SOLANA_RPC_URL")!, {
