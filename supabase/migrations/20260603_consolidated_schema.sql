@@ -51,6 +51,7 @@ CREATE TABLE public.buyers (
   id             uuid        NOT NULL DEFAULT gen_random_uuid(),
   user_id        uuid        NOT NULL REFERENCES auth.users(id),
   wallet_address text        NOT NULL UNIQUE,
+  confirmed      boolean     NOT NULL DEFAULT false,
   created_at     timestamptz DEFAULT now(),
   CONSTRAINT buyers_pkey PRIMARY KEY (id)
 );

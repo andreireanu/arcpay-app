@@ -6,7 +6,12 @@ export interface CounterOffer {
   tx_signature: string;
   amount: number;
   quantity: number;
-  status: "active" | "confirmed" | "buyer_canceled" | "seller_canceled";
+  status:
+    | "active"
+    | "active_hidden"
+    | "confirmed"
+    | "buyer_canceled"
+    | "seller_canceled";
   created_at: string;
   expiry_at: string;
 }

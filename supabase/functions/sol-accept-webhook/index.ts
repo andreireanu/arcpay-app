@@ -125,6 +125,18 @@ Deno.serve(async (req) => {
       );
       if (qtyError) console.error("quantity increment error", qtyError);
 
+      // Mark the accepted buyers confirmed (their rows were inserted with
+      // confirmed=false when they submitted the counter offer). Pure wallet-keyed
+      // flip — no user_id. Dedupe in case one buyer had multiple accepted offers.
+      const buyerWallets = [
+        ...new Set(counteroffers_data.map((co) => co.buyer_wallet)),
+      ];
+      const { error: buyerError } = await supabase
+        .from("buyers")
+        .update({ confirmed: true })
+        .in("wallet_address", buyerWallets);
+      if (buyerError) console.error("buyer confirm error", buyerError);
+
       // Return the offer_record rent to each buyer. vault = None (sellerWallet
       // omitted): the offer amount already moved to the seller on accept, so only
       // the rent is refunded. Emits OfferAdminRefunded → sol-refund-webhook
