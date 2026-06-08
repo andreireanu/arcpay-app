@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
 
   const payload = await req.json();
   const transactions = Array.isArray(payload) ? payload : [payload];
-  console.log("sol-adminRefund-webhook received", transactions.length, "tx(s)");
+  console.log("sol-refund-webhook received", transactions.length, "tx(s)");
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

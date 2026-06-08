@@ -4,7 +4,7 @@ import {
   BATCH_SIZE,
   NETWORK_FEE_PER_TX,
   sendAdminRefunds,
-} from "../_shared/adminRefundOffer.ts";
+} from "../_sol-shared/sendAdminRefunds.ts";
 
 async function offerAcceptedDiscriminator(): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(
@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 
   const payload = await req.json();
   const transactions = Array.isArray(payload) ? payload : [payload];
-  console.log("sol-counter-webhook received", transactions.length, "tx(s)");
+  console.log("sol-accept-webhook received", transactions.length, "tx(s)");
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
 
       // Return the offer_record rent to each buyer. vault = None (sellerWallet
       // omitted): the offer amount already moved to the seller on accept, so only
-      // the rent is refunded. Emits OfferAdminRefunded → sol-adminRefund-webhook
+      // the rent is refunded. Emits OfferAdminRefunded → sol-refund-webhook
       // flips rent_returned = true.
       const connection = new Connection(Deno.env.get("SOLANA_RPC_URL")!, {
         commitment: "confirmed",

@@ -8,7 +8,7 @@ import {
   BATCH_SIZE,
   NETWORK_FEE_PER_TX,
   sendAdminRefunds,
-} from "../_shared/adminRefundOffer.ts";
+} from "../_sol-shared/sendAdminRefunds.ts";
 
 async function getDiscriminator(eventName: string): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(

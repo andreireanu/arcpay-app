@@ -13,7 +13,7 @@ export async function getOfferAuth(
   buyerWallet: string,
   amountLamports: number,
 ): Promise<OfferAuth> {
-  const res = await fetch(`${config.supabase.url}/functions/v1/sol-offer-authorize`, {
+  const res = await fetch(`${config.supabase.url}/functions/v1/sol-counteroffer-authorize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'apikey': config.supabase.anonKey },
     body: JSON.stringify({ offer_id: offerId, buyer_wallet: buyerWallet, amount_lamports: amountLamports }),
