@@ -18,6 +18,7 @@ import {
   watchNewCounterOffers,
 } from "../supabase/offers/getCounterOffers";
 import { acceptCounter } from "../solana/instructions/acceptCounter";
+import { sellerCancelOffer } from "../solana/instructions/sellerCancelOffer";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
 import s from "../styles/dashboard.module.css";
@@ -66,7 +67,11 @@ export default function OfferDetail() {
   const [counterOffers, setCounterOffers] = useState<CounterOffer[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [accepting, setAccepting] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelCountdown, setCancelCountdown] = useState(10);
+  const [canceling, setCanceling] = useState(false);
   const acceptingRef = useRef(false);
+  const cancelWasActiveRef = useRef(false);
 
   useEffect(() => {
     if (!offerId) return;
@@ -90,7 +95,7 @@ export default function OfferDetail() {
     const ids = counterOfferIdKey ? counterOfferIdKey.split(",") : [];
     if (ids.length === 0) return;
     return watchCounterOfferStatuses(ids, (id, status) => {
-      if (status === 'canceled') {
+      if (status === "buyer_canceled" || status === "seller_canceled") {
         setCounterOffers((prev) => prev.filter((co) => co.id !== id));
       } else {
         setCounterOffers((prev) =>
@@ -130,10 +135,79 @@ export default function OfferDetail() {
     setToggling(false);
   }
 
-  async function handleCancel() {
-    if (!offer) return;
-    await cancelOffer(offer.id);
-    setOffer((prev) => (prev ? { ...prev, status: "canceled" } : prev));
+  useEffect(() => {
+    if (!cancelModalOpen || cancelCountdown <= 0) return;
+    const timer = setTimeout(() => setCancelCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cancelModalOpen, cancelCountdown]);
+
+  async function handleCancelClick() {
+    if (!offer || toggling) return;
+    cancelWasActiveRef.current = offer.status === "active";
+    if (offer.status === "active") {
+      setToggling(true);
+      try {
+        await pauseOffer(offer.id);
+        setOffer((prev) => (prev ? { ...prev, status: "paused" } : prev));
+      } catch (err) {
+        console.error("Failed to pause offer", err);
+        setToggling(false);
+        return;
+      }
+      setToggling(false);
+    }
+    setCancelCountdown(10);
+    setCancelModalOpen(true);
+  }
+
+  async function handleCancelDismiss() {
+    if (canceling) return;
+    if (cancelWasActiveRef.current && offer) {
+      try {
+        await resumeOffer(offer.id);
+        setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
+      } catch (err) {
+        console.error("Failed to resume offer", err);
+      }
+    }
+    setCancelModalOpen(false);
+  }
+
+  async function handleCancelConfirm() {
+    if (!offer || canceling) return;
+    setCanceling(true);
+    try {
+      const activeCounterOffers = counterOffers.filter(
+        (co) => co.status === "active",
+      );
+
+      if (activeCounterOffers.length === 0) {
+        // Nothing to refund — skip the on-chain tx and mark canceled off-chain.
+        await cancelOffer(offer.id);
+        setOffer((prev) => (prev ? { ...prev, status: "canceled" } : prev));
+        setCancelModalOpen(false);
+        return;
+      }
+
+      // Active counter offers exist — go on-chain so the webhook refunds them.
+      if (!primaryWallet || !isSolanaWallet(primaryWallet)) return;
+      const signer = await primaryWallet.getSigner();
+      const anchorWallet = {
+        publicKey: new PublicKey(primaryWallet.address),
+        signTransaction: signer.signTransaction.bind(signer),
+        signAllTransactions: signer.signAllTransactions.bind(signer),
+      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
+      await sellerCancelOffer(connection, anchorWallet, offer.id);
+      setCancelModalOpen(false);
+    } catch (err) {
+      console.error("Failed to cancel offer", err);
+      try {
+        await resumeOffer(offer.id);
+        setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
+      } catch {}
+    } finally {
+      setCanceling(false);
+    }
   }
 
   async function handleDownloadQr() {
@@ -206,7 +280,9 @@ export default function OfferDetail() {
   }
 
   function handleAcceptAll() {
-    const activeCounterOffers = counterOffers.filter((co) => co.status === "active");
+    const activeCounterOffers = counterOffers.filter(
+      (co) => co.status === "active",
+    );
     handleAccept(activeCounterOffers.map((co) => co.id));
   }
 
@@ -272,6 +348,7 @@ export default function OfferDetail() {
   const canAct = offer.status === "active" || offer.status === "paused";
 
   return (
+    <>
     <div className={s.page}>
       <header className={s.header}>
         <div className={s.logo}>
@@ -327,7 +404,7 @@ export default function OfferDetail() {
                     ? "Pause offer"
                     : "Resume offer"}
               </button>
-              <button className={s.cancelButton} onClick={handleCancel}>
+              <button className={s.cancelButton} onClick={handleCancelClick} disabled={toggling}>
                 <CloseIcon />
                 Cancel offer
               </button>
@@ -403,53 +480,58 @@ export default function OfferDetail() {
                   </div>
                 </div>
               </div>
-              {selectedIds.size > 0 &&
-                (() => {
-                  const selected = counterOffers.filter((co) =>
-                    selectedIds.has(co.id),
-                  );
-                  const totalAmount = selected.reduce(
-                    (sum, co) => sum + co.amount,
-                    0,
-                  );
-                  const totalQty = selected.reduce(
-                    (sum, co) => sum + co.quantity,
-                    0,
-                  );
-                  const avgPrice = totalQty > 0 ? totalAmount / totalQty : 0;
-                  return (
-                    <div className={s.selectionSummary}>
-                      <div className={s.selectionSummaryItem}>
-                        <span className={s.selectionSummaryLabel}>
-                          Selected offers
-                        </span>
-                        <span className={s.selectionSummaryValue}>
-                          {selected.length}
-                        </span>
-                      </div>
-                      <div className={s.selectionSummarySep} />
-                      <div className={s.selectionSummaryItem}>
-                        <span className={s.selectionSummaryLabel}>
-                          Avg price / product
-                        </span>
-                        <span className={s.selectionSummaryValue}>
-                          {(avgPrice / 1_000_000_000).toFixed(4)} SOL
-                        </span>
-                      </div>
-                      <div className={s.selectionSummarySep} />
-                      <div className={s.selectionSummaryItem}>
-                        <span className={s.selectionSummaryLabel}>
-                          You will receive
-                        </span>
-                        <span
-                          className={`${s.selectionSummaryValue} ${s.selectionSummaryTotal}`}
-                        >
-                          {(totalAmount / 1_000_000_000).toFixed(4)} SOL
-                        </span>
-                      </div>
+              {(() => {
+                const hasSelection = selectedIds.size > 0;
+                const activeOffers = counterOffers.filter(
+                  (co) => co.status === "active",
+                );
+                const displayed = hasSelection
+                  ? counterOffers.filter((co) => selectedIds.has(co.id))
+                  : activeOffers;
+                const totalAmount = displayed.reduce(
+                  (sum, co) => sum + co.amount,
+                  0,
+                );
+                const totalQty = displayed.reduce(
+                  (sum, co) => sum + co.quantity,
+                  0,
+                );
+                const avgPrice = totalQty > 0 ? totalAmount / totalQty : 0;
+                return (
+                  <div className={s.selectionSummary}>
+                    <div className={s.selectionSummaryItem}>
+                      <span className={s.selectionSummaryLabel}>
+                        {hasSelection
+                          ? "Selected offers"
+                          : "If accepting all offers"}
+                      </span>
+                      <span className={s.selectionSummaryValue}>
+                        {displayed.length}
+                      </span>
                     </div>
-                  );
-                })()}
+                    <div className={s.selectionSummarySep} />
+                    <div className={s.selectionSummaryItem}>
+                      <span className={s.selectionSummaryLabel}>
+                        Avg price / product
+                      </span>
+                      <span className={s.selectionSummaryValue}>
+                        {(avgPrice / 1_000_000_000).toFixed(4)} SOL
+                      </span>
+                    </div>
+                    <div className={s.selectionSummarySep} />
+                    <div className={s.selectionSummaryItem}>
+                      <span className={s.selectionSummaryLabel}>
+                        You will receive
+                      </span>
+                      <span
+                        className={`${s.selectionSummaryValue} ${s.selectionSummaryTotal}`}
+                      >
+                        {(totalAmount / 1_000_000_000).toFixed(4)} SOL
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
               {[...counterOffers]
                 .sort((a, b) => {
                   if (a.status === "confirmed" && b.status !== "confirmed")
@@ -518,5 +600,35 @@ export default function OfferDetail() {
         </div>
       </main>
     </div>
+
+    {cancelModalOpen && (
+        <div className={s.modalOverlay} onClick={handleCancelDismiss}>
+          <div className={s.modal} onClick={(e) => e.stopPropagation()}>
+            <h2 className={s.modalTitle}>Cancel offer?</h2>
+            <p>All active counter offers will be automatically refunded to buyers. This cannot be undone.</p>
+            <div className={s.modalActions}>
+              <button
+                className={s.modalCancelButton}
+                onClick={handleCancelDismiss}
+                disabled={canceling}
+              >
+                Keep offer
+              </button>
+              <button
+                className={s.modalSubmitButton}
+                disabled={cancelCountdown > 0 || canceling}
+                onClick={handleCancelConfirm}
+              >
+                {canceling
+                  ? "Canceling…"
+                  : cancelCountdown > 0
+                    ? `Confirm (${cancelCountdown})`
+                    : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+    )}
+    </>
   );
 }

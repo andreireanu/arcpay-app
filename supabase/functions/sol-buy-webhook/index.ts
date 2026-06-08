@@ -42,6 +42,7 @@ Deno.serve(async (req) => {
 
   const payload = await req.json();
   const transactions = Array.isArray(payload) ? payload : [payload];
+  console.log("sol-buy-webhook received", transactions.length, "tx(s)");
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -82,6 +83,8 @@ Deno.serve(async (req) => {
         ),
       );
 
+      console.log("buy_completed event", offerId, "buyer", buyerWallet);
+
       const { error: txError } = await supabase.from("qr_transactions").insert({
         offer_id: offerId,
         buyer_wallet: buyerWallet,
@@ -103,6 +106,7 @@ Deno.serve(async (req) => {
         { p_offer_id: offerId, p_amount: 1 },
       );
       if (qtyError) console.error("quantity increment error", qtyError);
+      else console.log("buy recorded", offerId, txSignature);
     }
   }
 

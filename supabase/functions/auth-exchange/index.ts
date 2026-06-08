@@ -42,16 +42,10 @@ Deno.serve(async (req) => {
   const internalEmail = `${walletAddress}@wallet.arcpay`;
   const siteUrl = Deno.env.get("SITE_URL") ?? "http://localhost:5173";
 
-  // Update role in user_metadata on every login so it reflects the current entry point.
-  await supabaseAdmin.auth.admin.listUsers().then(async ({ data }) => {
-    const existing = data.users.find((u) => u.email === internalEmail);
-    if (existing) {
-      await supabaseAdmin.auth.admin.updateUserById(existing.id, {
-        user_metadata: { wallet_address: walletAddress, role: userRole },
-      });
-    }
-  });
-
+  // Ensure the user exists. generateLink succeeds for an existing user and errors
+  // otherwise; on error we create the user and generate the link again. Note:
+  // GoTrue lowercases the stored email, so we never compare emails ourselves —
+  // we rely on generateLink to resolve the user and return it.
   let { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
     type: "magiclink",
     email: internalEmail,
@@ -62,7 +56,6 @@ Deno.serve(async (req) => {
     const { error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: internalEmail,
       email_confirm: true,
-      user_metadata: { wallet_address: walletAddress, role: userRole },
     });
     if (createError) {
       console.error("Failed to create Supabase user", createError);
@@ -79,6 +72,19 @@ Deno.serve(async (req) => {
   if (linkError || !linkData) {
     console.error("Failed to generate session link", linkError);
     return new Response("Failed to create session", { status: 500, headers: corsHeaders });
+  }
+
+  // Persist wallet_address + role in app_metadata (service-role only — NOT
+  // end-user editable) so RLS policies can safely gate on it. user_metadata must
+  // never be used in a security context. Done unconditionally for both new and
+  // existing users, BEFORE verifyOtp mints the session, so the JWT carries it.
+  // Refreshed on every login so role reflects the current entry point.
+  const { error: metaError } = await supabaseAdmin.auth.admin.updateUserById(linkData.user.id, {
+    app_metadata: { wallet_address: walletAddress, role: userRole },
+  });
+  if (metaError) {
+    console.error("Failed to set app_metadata", metaError);
+    return new Response("Failed to set user metadata", { status: 500, headers: corsHeaders });
   }
 
   const linkType = new URL(linkData.properties.action_link).searchParams.get("type") as "signup" | "magiclink" | "recovery";

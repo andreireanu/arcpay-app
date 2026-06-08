@@ -1,8 +1,7 @@
-import { Buffer } from 'buffer/'
-import { PublicKey, Transaction } from '@solana/web3.js'
+import { Transaction } from '@solana/web3.js'
 import type { Connection } from '@solana/web3.js'
 import type { AnchorWallet } from '@solana/wallet-adapter-react'
-import { getProgram, PROGRAM_ID } from '../program'
+import { getProgram } from '../program'
 
 function uuidToBytes(uuid: string): Uint8Array {
   const hex = uuid.replace(/-/g, '')
@@ -11,32 +10,22 @@ function uuidToBytes(uuid: string): Uint8Array {
   return bytes
 }
 
-export async function cancelOffer(
+export async function sellerCancelOffer(
   connection: Connection,
   wallet: AnchorWallet,
-  ephemeralId: string,
-  sellerWallet: string,
+  offerId: string,
 ): Promise<string> {
-  const uuidBytes = uuidToBytes(ephemeralId)
-  const sellerPubkey = new PublicKey(sellerWallet)
-
-  const [offerRecordPda] = PublicKey.findProgramAddressSync([Buffer.from('offer'), uuidBytes], PROGRAM_ID)
-  const [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from('vault'), sellerPubkey.toBytes()], PROGRAM_ID)
-
+  const uuidBytes = uuidToBytes(offerId)
   const program = getProgram(connection, wallet)
-  const cancelIx = await program.methods
-    .buyerCancelOffer(Array.from(uuidBytes))
-    .accounts({
-      buyer: wallet.publicKey,
-      seller: sellerPubkey,
-      offerRecord: offerRecordPda,
-      vault: vaultPda,
-    })
+
+  const ix = await program.methods
+    .sellerCancelOffer(Array.from(uuidBytes))
+    .accounts({ seller: wallet.publicKey })
     .instruction()
 
   const latestBlockhash = await connection.getLatestBlockhash()
   const tx = new Transaction()
-  tx.add(cancelIx)
+  tx.add(ix)
   tx.recentBlockhash = latestBlockhash.blockhash
   tx.feePayer = wallet.publicKey
 

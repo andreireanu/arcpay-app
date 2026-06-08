@@ -1,9 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-async function offerCanceledDiscriminator(): Promise<Uint8Array> {
+async function offerAdminRefundedDiscriminator(): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode("event:OfferCanceled"),
+    new TextEncoder().encode("event:OfferAdminRefunded"),
   );
   return new Uint8Array(hash, 0, 8);
 }
@@ -13,9 +13,7 @@ function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 function bytesToUuid(bytes: Uint8Array): string {
-  const h = Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const h = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
@@ -27,13 +25,14 @@ Deno.serve(async (req) => {
 
   const payload = await req.json();
   const transactions = Array.isArray(payload) ? payload : [payload];
+  console.log("sol-refund-webhook received", transactions.length, "tx(s)");
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const disc = await offerCanceledDiscriminator();
+  const disc = await offerAdminRefundedDiscriminator();
 
   for (const tx of transactions) {
     const logs: string[] = tx.meta?.logMessages ?? tx.logs ?? [];
@@ -46,18 +45,19 @@ Deno.serve(async (req) => {
         (c) => c.charCodeAt(0),
       );
 
-      // OfferCanceled: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 amount + 8 timestamp = 104 bytes
+      // OfferAdminRefunded: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 amount + 8 timestamp = 104 bytes
       if (bytes.length < 104 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
 
       const ephemeralUuid = bytesToUuid(bytes.slice(8, 24));
+      console.log("offer_admin_refunded event", ephemeralUuid);
 
       const { error } = await supabase
         .from("qr_counteroffers")
-        .update({ status: "canceled" })
+        .update({ rent_returned: true })
         .eq("ephemeral_id", ephemeralUuid);
 
-      if (error) console.error("qr_counteroffers status update error", ephemeralUuid, error);
-      else console.log("canceled counter offer for ephemeral", ephemeralUuid);
+      if (error) console.error("rent_returned update error", ephemeralUuid, error);
+      else console.log("rent_returned set for ephemeral", ephemeralUuid);
     }
   }
 

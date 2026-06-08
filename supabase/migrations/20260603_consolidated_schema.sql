@@ -148,6 +148,9 @@ CREATE TABLE public.qr_ephemeral (
   created_at     timestamptz DEFAULT now()
 );
 
+-- RLS enabled with no permissive policies — backend-only table. Only the service
+-- role (the sol-counteroffer-* edge functions) reads/writes it; anon and
+-- authenticated are denied. The linter's rls_enabled_no_policy INFO is expected.
 ALTER TABLE qr_ephemeral ENABLE ROW LEVEL SECURITY;
 
 -- ─── qr_counteroffers ────────────────────────────────────────────────────────
@@ -160,6 +163,7 @@ CREATE TABLE public.qr_counteroffers (
   amount         bigint      NOT NULL,
   quantity       integer     NOT NULL DEFAULT 1,
   status         text        NOT NULL DEFAULT 'active',
+  rent_returned  boolean     NOT NULL DEFAULT false,
   expiry_at      timestamptz NOT NULL DEFAULT now() + INTERVAL '3 months',
   created_at     timestamptz DEFAULT now(),
   CONSTRAINT qr_counteroffers_pkey PRIMARY KEY (id)
@@ -180,11 +184,16 @@ CREATE POLICY "sellers can read counteroffers on own offers"
     )
   );
 
+-- Gate on app_metadata, NOT user_metadata: user_metadata is editable by end
+-- users via supabase.auth.updateUser and must never be used in a security
+-- context. app_metadata is written only by the service role (auth-exchange).
 CREATE POLICY "buyers can read own counteroffers"
   ON qr_counteroffers FOR SELECT TO authenticated
   USING (
-    buyer_wallet = (auth.jwt() -> 'user_metadata' ->> 'wallet_address')
+    buyer_wallet = (auth.jwt() -> 'app_metadata' ->> 'wallet_address')
   );
+
+ALTER PUBLICATION supabase_realtime ADD TABLE qr_counteroffers;
 
 -- ─── qr_accepted_counter ─────────────────────────────────────────────────────
 -- Ephemeral witness table for a seller accepting one or more counter offers.
@@ -203,24 +212,19 @@ CREATE TABLE public.qr_accepted_counter (
 ALTER TABLE qr_accepted_counter ENABLE ROW LEVEL SECURITY;
 
 -- ─── Helper functions ────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION increment_offer_quantity_sold(p_offer_id uuid)
-RETURNS void AS $$
+-- Called only by the backend (service role) from the webhooks. SECURITY DEFINER
+-- so it can update qr_offers regardless of caller, with a pinned empty
+-- search_path (all objects schema-qualified) to block search_path hijacking.
+-- EXECUTE is revoked from anon/authenticated so it cannot be called directly via
+-- /rest/v1/rpc — only the service role may invoke it.
+CREATE OR REPLACE FUNCTION public.increment_offer_quantity_sold_by(p_offer_id uuid, p_amount integer)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
 BEGIN
-  UPDATE qr_offers
-  SET
-    quantity_sold = quantity_sold + 1,
-    status = CASE
-      WHEN quantity_sold + 1 >= quantity THEN 'sold'
-      ELSE status
-    END
-  WHERE id = p_offer_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION increment_offer_quantity_sold_by(p_offer_id uuid, p_amount integer)
-RETURNS void AS $$
-BEGIN
-  UPDATE qr_offers
+  UPDATE public.qr_offers
   SET
     quantity_sold = quantity_sold + p_amount,
     status = CASE
@@ -229,7 +233,10 @@ BEGIN
     END
   WHERE id = p_offer_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.increment_offer_quantity_sold_by(uuid, integer) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION public.increment_offer_quantity_sold_by(uuid, integer) TO service_role;
 
 -- ─── Seed ────────────────────────────────────────────────────────────────────
 INSERT INTO products (id, name, description, image_url, fee_bps)

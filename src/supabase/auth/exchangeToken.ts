@@ -24,6 +24,5 @@ export async function exchangeToken(
 
   const { access_token, refresh_token } = await response.json()
   await supabase.auth.setSession({ access_token, refresh_token })
-  await supabase.auth.updateUser({ data: { wallet_address: walletAddress, role } })
   localStorage.setItem('arcpay_role', role)
 }
