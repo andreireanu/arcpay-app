@@ -72,7 +72,8 @@ CREATE TABLE public.qr_offers (
   status         text        NOT NULL DEFAULT 'active',
   seller_wallet  text        REFERENCES sellers(wallet_address),
   fee_bps        bigint      NOT NULL DEFAULT 0,
-  quantity       integer     NOT NULL DEFAULT 1,
+  unlimited      boolean     NOT NULL DEFAULT true,
+  quantity       integer     NOT NULL DEFAULT 2147483647,
   quantity_sold  integer     NOT NULL DEFAULT 0,
   created_at     timestamptz DEFAULT now(),
   CONSTRAINT qr_offers_pkey PRIMARY KEY (id)

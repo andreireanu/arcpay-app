@@ -7,5 +7,6 @@ export interface Offer {
   status: "unlisted" | "active" | "paused" | "canceled" | "sold";
   quantity: number;
   quantity_sold: number;
+  unlimited: boolean;
   created_at: string;
 }

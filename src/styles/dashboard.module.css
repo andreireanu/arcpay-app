@@ -617,6 +617,29 @@
     cursor: not-allowed;
 }
 
+.checkboxRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--color-yellow);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.checkboxLabel {
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted);
+}
+
 /* ── Counter offers section ──────────────────────────────── */
 .counterOffersSection {
     background: #171717;

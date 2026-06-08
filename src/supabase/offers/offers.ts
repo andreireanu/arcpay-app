@@ -8,10 +8,11 @@ export async function insertOffer(
   priceLamports: number,
   feeBps: number,
   quantity: number,
+  unlimited: boolean,
 ): Promise<Offer> {
   const { data: offer, error } = await supabase
     .from('qr_offers')
-    .insert({ name, description, price_lamports: priceLamports, seller_wallet: sellerWallet, fee_bps: feeBps, quantity })
+    .insert({ name, description, price_lamports: priceLamports, seller_wallet: sellerWallet, fee_bps: feeBps, quantity, unlimited })
     .select()
     .single()
   if (error) throw error

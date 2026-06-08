@@ -375,8 +375,7 @@ export default function OfferDetail() {
               </div>
               <p className={s.offerPrice}>{priceSOL} SOL</p>
               <p className={s.offerQuantity}>
-                {offer.quantity - offer.quantity_sold} of {offer.quantity}{" "}
-                remaining
+                {offer.unlimited ? 'Unlimited' : `${offer.quantity - offer.quantity_sold} of ${offer.quantity} remaining`}
               </p>
             </div>
             <div className={s.offerCardRight}>

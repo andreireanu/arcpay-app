@@ -68,13 +68,13 @@ export default function Dashboard() {
     })
   }, [offers])
 
-  async function handleCreateOffer(name: string, description: string, priceLamports: number, quantity: number) {
+  async function handleCreateOffer(name: string, description: string, priceLamports: number, quantity: number, unlimited: boolean) {
     if (!walletAddress) return
     setCreating(true)
     try {
       await registerSellerIfNew(walletAddress)
       const product = await getProduct(QR_PRODUCT_ID)
-      const offer = await insertOffer(walletAddress, name, description, priceLamports, product.fee_bps, quantity)
+      const offer = await insertOffer(walletAddress, name, description, priceLamports, product.fee_bps, quantity, unlimited)
       setOffers((prev) => [offer, ...prev])
       setOfferModalOpen(false)
     } catch (err) {
@@ -176,7 +176,7 @@ export default function Dashboard() {
                         {(offer.price_lamports / 1_000_000_000).toFixed(4)} SOL
                       </p>
                       <p className={s.offerQuantity}>
-                        {offer.quantity - offer.quantity_sold} of {offer.quantity} remaining
+                        {offer.unlimited ? 'Unlimited' : `${offer.quantity - offer.quantity_sold} of ${offer.quantity} remaining`}
                       </p>
                     </div>
                     <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>

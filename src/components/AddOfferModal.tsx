@@ -1,6 +1,8 @@
 import { useState } from "react";
 import s from "../styles/dashboard.module.css";
 
+const UNLIMITED_SENTINEL = 2_147_483_647;
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -9,6 +11,7 @@ interface Props {
     description: string,
     priceLamports: number,
     quantity: number,
+    unlimited: boolean,
   ) => void;
   creating: boolean;
 }
@@ -22,6 +25,7 @@ export default function AddOfferModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [limitQuantity, setLimitQuantity] = useState(false);
   const [quantity, setQuantity] = useState("1");
 
   if (!open) return null;
@@ -30,8 +34,14 @@ export default function AddOfferModal({
     name.length >= 3 &&
     description.length >= 3 &&
     !!price &&
-    parseInt(quantity) >= 1 &&
+    (!limitQuantity || parseInt(quantity) >= 1) &&
     !creating;
+
+  function handleSubmit() {
+    const priceLamports = Math.round(parseFloat(price) * 1_000_000_000);
+    const qty = limitQuantity ? parseInt(quantity) : UNLIMITED_SENTINEL;
+    onSubmit(name, description, priceLamports, qty, !limitQuantity);
+  }
 
   return (
     <div className={s.modalOverlay}>
@@ -71,18 +81,29 @@ export default function AddOfferModal({
               className={s.modalInput}
             />
           </div>
-          <div className={s.modalField}>
-            <label className={s.modalLabel}>Quantity</label>
+          <label className={s.checkboxRow}>
             <input
-              type="number"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              placeholder="1"
-              min="1"
-              step="1"
-              className={s.modalInput}
+              type="checkbox"
+              checked={limitQuantity}
+              onChange={(e) => setLimitQuantity(e.target.checked)}
+              className={s.checkbox}
             />
-          </div>
+            <span className={s.checkboxLabel}>Limit quantity</span>
+          </label>
+          {limitQuantity && (
+            <div className={s.modalField}>
+              <label className={s.modalLabel}>Quantity</label>
+              <input
+                type="number"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="1"
+                min="1"
+                step="1"
+                className={s.modalInput}
+              />
+            </div>
+          )}
         </div>
 
         <div className={s.modalActions}>
@@ -92,14 +113,7 @@ export default function AddOfferModal({
           <button
             className={s.modalSubmitButton}
             disabled={!canSubmit}
-            onClick={() =>
-              onSubmit(
-                name,
-                description,
-                Math.round(parseFloat(price) * 1_000_000_000),
-                parseInt(quantity),
-              )
-            }
+            onClick={handleSubmit}
           >
             {creating ? "Creating…" : "Create"}
           </button>
