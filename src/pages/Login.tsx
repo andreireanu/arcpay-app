@@ -17,7 +17,7 @@ export default function Login() {
     if (!user || !walletAddress || !token || exchangingRef.current) return
     exchangingRef.current = true
     exchangeToken(token, walletAddress)
-      .then(() => navigate('/dashboard'))
+      .then(() => navigate('/seller'))
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Login failed')
         exchangingRef.current = false

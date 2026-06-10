@@ -1,22 +1,24 @@
-import { config } from '../../config/env'
+import { supabase } from '../client'
 
 export interface AcceptCounterAuth {
   ephemeralUuid: string
   signature: string
   expiry: number
   backendPublicKey: string
-  totalAmount: number
+  sellerAmount: number
+  feeAmount: number
 }
 
 export async function getAcceptCounterAuth(
   counterOfferIds: string[],
   sellerWallet: string,
 ): Promise<AcceptCounterAuth> {
-  const res = await fetch(`${config.supabase.url}/functions/v1/sol-accept-authorize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': config.supabase.anonKey },
-    body: JSON.stringify({ counter_offer_ids: counterOfferIds, seller_wallet: sellerWallet }),
+  // invoke() attaches the logged-in seller's bearer token, so the function can
+  // run with JWT verification on (only authenticated sellers may request a
+  // signature). The signing logic still binds to the seller's wallet on-chain.
+  const { data, error } = await supabase.functions.invoke('sol-accept-authorize', {
+    body: { counter_offer_ids: counterOfferIds, seller_wallet: sellerWallet },
   })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  if (error) throw error
+  return data as AcceptCounterAuth
 }

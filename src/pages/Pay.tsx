@@ -224,7 +224,7 @@ export default function Pay() {
                     Your active offer made:
                   </span>
                   <span className={s.activeOfferAmount}>
-                    {(activeCounterOffer.amount / 1_000_000_000).toFixed(4)} SOL
+                    {((activeCounterOffer.seller_amount + activeCounterOffer.fee_amount) / 1_000_000_000).toFixed(4)} SOL
                   </span>
                   <div className={s.activeOfferActions}>
                     <button

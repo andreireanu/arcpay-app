@@ -1,0 +1,30 @@
+project_id = "arcpay-app"
+
+# ── Edge function JWT settings ────────────────────────────────────────────────
+# Helius webhooks are called server-to-server with no Supabase session — they
+# authenticate via the HELIUS_WEBHOOK_SECRET shared secret inside the handler,
+# so the platform-level JWT check must be OFF or the gateway rejects them with
+# UNAUTHORIZED_INVALID_JWT_FORMAT before the code runs.
+[functions.sol-buy-webhook]
+verify_jwt = false
+
+[functions.sol-counteroffer-webhook]
+verify_jwt = false
+
+[functions.sol-accept-webhook]
+verify_jwt = false
+
+[functions.sol-cancel-webhook]
+verify_jwt = false
+
+[functions.sol-refund-webhook]
+verify_jwt = false
+
+# auth-exchange runs before the user has a Supabase session (it mints one), so
+# it must also be callable without a JWT.
+[functions.auth-exchange]
+verify_jwt = false
+
+# The *-authorize functions are intentionally NOT listed here: they default to
+# verify_jwt = true and are called from the browser via supabase.functions.invoke,
+# which attaches the logged-in user's bearer token.

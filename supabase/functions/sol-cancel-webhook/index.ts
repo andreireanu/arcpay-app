@@ -81,14 +81,26 @@ Deno.serve(async (req) => {
         const ephemeralUuid = bytesToUuid(bytes.slice(8, 24));
         console.log("buyer_cancel event", ephemeralUuid);
 
-        const { error } = await supabase
+        const { data: canceledRows, error } = await supabase
           .from("qr_counteroffers")
           .update({ status: "buyer_canceled", rent_returned: true })
-          .eq("ephemeral_id", ephemeralUuid);
+          .eq("ephemeral_id", ephemeralUuid)
+          .select("id");
 
         if (error)
           console.error("buyer_canceled update error", ephemeralUuid, error);
-        else console.log("buyer_canceled", ephemeralUuid);
+        else {
+          console.log("buyer_canceled", ephemeralUuid);
+          // Drop any seller hidden-marker for this now-canceled counter offer.
+          if (canceledRows && canceledRows.length > 0) {
+            const { error: hiddenDelError } = await supabase
+              .from("qr_counteroffers_seller_state")
+              .delete()
+              .in("counteroffer_id", canceledRows.map((r) => r.id));
+            if (hiddenDelError)
+              console.error("seller_state cleanup error", hiddenDelError);
+          }
+        }
         continue;
       }
 
@@ -100,7 +112,7 @@ Deno.serve(async (req) => {
 
         const { data: counterOffers, error: fetchError } = await supabase
           .from("qr_counteroffers")
-          .select("ephemeral_id, buyer_wallet")
+          .select("id, ephemeral_id, buyer_wallet")
           .eq("offer_id", offerIdUuid)
           .eq("status", "active");
 
@@ -151,6 +163,14 @@ Deno.serve(async (req) => {
             offerIdUuid,
             counterOffers.length,
           );
+
+        // Drop any seller hidden-markers for these now-canceled counter offers.
+        const { error: hiddenDelError } = await supabase
+          .from("qr_counteroffers_seller_state")
+          .delete()
+          .in("counteroffer_id", counterOffers.map((co) => co.id));
+        if (hiddenDelError)
+          console.error("seller_state cleanup error", hiddenDelError);
 
         const connection = new Connection(Deno.env.get("SOLANA_RPC_URL")!, {
           commitment: "confirmed",

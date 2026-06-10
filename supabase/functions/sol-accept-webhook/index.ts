@@ -53,8 +53,8 @@ Deno.serve(async (req) => {
         (c) => c.charCodeAt(0),
       );
 
-      // OfferAccepted: 8 disc + 16 uuid + 32 seller + 8 total_amount + 8 timestamp = 72 bytes
-      if (bytes.length < 72 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
+      // OfferAccepted: 8 disc + 16 uuid + 32 seller + 8 seller_amount + 8 fee_amount + 8 timestamp = 80 bytes
+      if (bytes.length < 80 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
 
       const ephemeralId = bytesToUuid(bytes.slice(8, 24));
       console.log("offer_accepted event", ephemeralId);
@@ -136,6 +136,15 @@ Deno.serve(async (req) => {
         .update({ confirmed: true })
         .in("wallet_address", buyerWallets);
       if (buyerError) console.error("buyer confirm error", buyerError);
+
+      // Drop any seller hidden-markers for these now-confirmed counter offers
+      // (they're leaving the active list anyway).
+      const { error: hiddenDelError } = await supabase
+        .from("qr_counteroffers_seller_state")
+        .delete()
+        .in("counteroffer_id", counterOfferIds);
+      if (hiddenDelError)
+        console.error("seller_state cleanup error", hiddenDelError);
 
       // Return the offer_record rent to each buyer. vault = None (sellerWallet
       // omitted): the offer amount already moved to the seller on accept, so only

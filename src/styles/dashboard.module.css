@@ -233,7 +233,7 @@
 
 .offersGrid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 12px;
 }
 
@@ -282,12 +282,161 @@
     background: var(--color-bg);
     border: 1px solid var(--color-border);
     border-radius: 20px;
-    padding: 20px;
+    padding: 16px;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
     gap: 16px;
+    cursor: pointer;
+    transition: border-color 0.15s;
 }
 
+.offerCard:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.offerCardThumb {
+    width: 82px;
+    height: 82px;
+    flex-shrink: 0;
+    background: #1a1a1a;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.offerCardThumb img {
+    width: 38px;
+    height: 38px;
+    opacity: 0.5;
+}
+
+.offerCardBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.offerCardHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.offerCardInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.offerCardBottom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.offerCardPrice {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-white);
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
+.offerCardPill {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 40px;
+    padding: 5px 12px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 18px;
+    color: #b4b4b4;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.offerCardIconBtn {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 40px;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #b4b4b4;
+    flex-shrink: 0;
+    text-decoration: none;
+    transition: opacity 0.15s;
+}
+
+.offerCardIconBtn:hover {
+    opacity: 0.7;
+}
+
+.offerCardMenuWrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.offerCardMenuDropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    background: #1e1e1e;
+    border: 1px solid #2a2a2a;
+    border-radius: 16px;
+    padding: 8px;
+    min-width: 180px;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.offerCardMenuDropdownItem {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: none;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 20px;
+    color: #b4b4b4;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    white-space: nowrap;
+    transition: background 0.1s;
+}
+
+.offerCardMenuDropdownItem:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.offerCardMenuDropdownItem:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* kept for reference — no longer used in the card */
 .offerCardTop {
     display: flex;
     align-items: flex-start;
@@ -617,6 +766,279 @@
     cursor: not-allowed;
 }
 
+.modalDangerButton {
+    flex: 1;
+    background: #2d0a0a;
+    border: none;
+    border-radius: var(--radius-pill);
+    padding: 12px 20px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 22px;
+    color: #f04438;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.modalDangerButton:hover {
+    opacity: 0.88;
+}
+
+.modalDangerButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Bottom tabbed panel ─────────────────────────────────── */
+.bottomPanel {
+    background: #0d0d0d;
+    border-radius: 40px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.tabsRow {
+    display: flex;
+    align-items: center;
+}
+
+.unhideAllBtn {
+    margin-left: auto;
+    background: var(--color-black);
+    border: 1px solid var(--color-border);
+    border-radius: 40px;
+    padding: 12px 20px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-white);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.unhideAllBtn:hover {
+    opacity: 0.85;
+}
+
+.unhideAllBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.tabGroup {
+    background: #2a2a2a;
+    border-radius: 40px;
+    padding: 4px;
+    display: flex;
+}
+
+.tabBtn {
+    background: transparent;
+    border: none;
+    border-radius: 40px;
+    padding: 12px 24px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 20px;
+    color: #b4b4b4;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    transition:
+        background 0.15s,
+        color 0.15s;
+}
+
+.tabBtnActive {
+    background: var(--color-black);
+    color: var(--color-white);
+}
+
+.tabBadge {
+    background: var(--color-yellow);
+    color: var(--color-black);
+    border-radius: 40px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.coList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.coListRow {
+    background: var(--color-bg);
+    border: 1px solid #2a2a2a;
+    border-radius: 40px;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+}
+
+.coListName {
+    flex: 4;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow: hidden;
+}
+
+.coListOfferIcon {
+    width: 36px;
+    height: 36px;
+    background: #1f2020;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.coListOfferIcon img {
+    width: 18px;
+    height: auto;
+}
+
+.coListCol {
+    flex: 3;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.coListLabel {
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-muted);
+}
+
+.coListValue {
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 20px;
+    color: #b4b4b4;
+    white-space: nowrap;
+}
+
+.coListValueBold {
+    flex: 2;
+    min-width: 0;
+    text-align: right;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 22px;
+    color: var(--color-white);
+    white-space: nowrap;
+}
+
+/* Fixed-width slots so the SOL amount's right edge stays aligned across rows
+   regardless of badge text width ("direct buy" vs "offer"). */
+.coListSourceSlot {
+    flex: 0 0 84px;
+    display: flex;
+    justify-content: center;
+}
+
+.coListStatusSlot {
+    flex: 0 0 92px;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.coListSourceBadge {
+    flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    padding: 3px 8px;
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.coListSourceBuy {
+    background: #0a1628;
+    color: #3b82f6;
+}
+
+.coListSourceCounter {
+    background: #1a0e28;
+    color: #a78bfa;
+}
+
+.statusConfirmed {
+    background: #01230f;
+    color: #00b54b;
+}
+
+.coListActions {
+    flex-shrink: 0;
+    display: flex;
+    gap: 8px;
+}
+
+.hideOfferBtn {
+    background: #171717;
+    border: 1px solid #f04438;
+    border-radius: 40px;
+    padding: 7px 14px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 18px;
+    color: #f04438;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.hideOfferBtn:hover {
+    opacity: 0.8;
+}
+
+.acceptOfferBtn {
+    background: #171717;
+    border: 1px solid #00b54b;
+    border-radius: 40px;
+    padding: 7px 14px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 18px;
+    color: #00b54b;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.acceptOfferBtn:hover {
+    opacity: 0.8;
+}
+
+.acceptOfferBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .checkboxRow {
     display: flex;
     align-items: center;
@@ -714,18 +1136,27 @@
 .selectionSummary {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 24px;
     background: #0d1f14;
     border: 1px solid #00b54b33;
-    border-radius: 20px;
-    padding: 16px 28px;
+    border-radius: 24px;
+    padding: 20px 28px;
+}
+
+.selectionSummaryStats {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 24px;
 }
 
 .selectionSummaryItem {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    flex: 1;
     gap: 2px;
 }
 
@@ -755,6 +1186,49 @@
 
 .selectionSummaryTotal {
     color: #00b54b;
+}
+
+.selectionSummaryActions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.summaryHideButton,
+.summaryAcceptButton {
+    background: transparent;
+    border-radius: var(--radius-pill);
+    padding: 10px 20px;
+    min-width: 170px;
+    text-align: center;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.summaryHideButton {
+    border: 1px solid #f04438;
+    color: #f04438;
+}
+
+.summaryAcceptButton {
+    border: 1px solid #00b54b;
+    color: #00b54b;
+}
+
+.summaryHideButton:disabled,
+.summaryAcceptButton:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.summaryHideButton:not(:disabled):hover,
+.summaryAcceptButton:not(:disabled):hover {
+    opacity: 0.8;
 }
 
 .counterOfferRow {
@@ -926,6 +1400,11 @@
 
 .acceptAllButton:hover {
     opacity: 0.85;
+}
+
+.acceptAllButton:disabled {
+    opacity: 0.35;
+    cursor: default;
 }
 
 .acceptSelectedButton {
