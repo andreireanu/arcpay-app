@@ -78,10 +78,11 @@ Deno.serve(async (req) => {
 
       console.log("offer_created event", ephemeralUuid, "buyer", buyerWallet, "amount", amount);
 
-      // Look up the real offer_id from the ephemeral uuid mapping.
+      // Look up the real offer_id from the ephemeral uuid mapping, and the
+      // parent offer's fee_bps so we can persist the seller/fee split.
       const { data: ephemeral, error: lookupError } = await supabase
         .from("qr_ephemeral")
-        .select("id, offer_id")
+        .select("id, offer_id, qr_offers(fee_bps)")
         .eq("id", ephemeralUuid)
         .maybeSingle();
 
@@ -99,6 +100,14 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // Carve the protocol fee out of the locked amount using the parent offer's
+      // fee_bps, persisting the seller/fee split (the same split the seller will
+      // later sign and the program will enforce on accept).
+      const feeBps =
+        (ephemeral.qr_offers as { fee_bps: number | null } | null)?.fee_bps ?? 0;
+      const feeAmount = Math.floor((amount * feeBps) / 10000);
+      const sellerAmount = amount - feeAmount;
+
       // Insert counter offer — skip if tx_signature already exists (duplicate delivery).
       const { error: insertError } = await supabase
         .from("qr_counteroffers")
@@ -107,7 +116,8 @@ Deno.serve(async (req) => {
           ephemeral_id: ephemeral.id,
           buyer_wallet: buyerWallet,
           tx_signature: txSignature,
-          amount,
+          seller_amount: sellerAmount,
+          fee_amount: feeAmount,
         });
 
       if (insertError) {

@@ -107,6 +107,14 @@ Deno.serve(async (req) => {
       );
       if (qtyError) console.error("quantity increment error", qtyError);
       else console.log("buy recorded", offerId, txSignature);
+
+      // Mark the buyer confirmed (row was inserted with confirmed=false when the
+      // buy was initiated on the frontend). Pure wallet-keyed flip — no user_id.
+      const { error: buyerError } = await supabase
+        .from("buyers")
+        .update({ confirmed: true })
+        .eq("wallet_address", buyerWallet);
+      if (buyerError) console.error("buyer confirm error", buyerError);
     }
   }
 

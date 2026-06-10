@@ -1,5 +1,6 @@
 -- ArcPay — full schema (consolidated, replaces all prior migrations)
 DROP TABLE IF EXISTS qr_accepted_counter CASCADE;
+DROP TABLE IF EXISTS qr_counteroffers_seller_state CASCADE;
 DROP TABLE IF EXISTS qr_counteroffers CASCADE;
 DROP TABLE IF EXISTS qr_ephemeral CASCADE;
 DROP TABLE IF EXISTS qr_transactions CASCADE;
@@ -51,6 +52,7 @@ CREATE TABLE public.buyers (
   id             uuid        NOT NULL DEFAULT gen_random_uuid(),
   user_id        uuid        NOT NULL REFERENCES auth.users(id),
   wallet_address text        NOT NULL UNIQUE,
+  confirmed      boolean     NOT NULL DEFAULT false,
   created_at     timestamptz DEFAULT now(),
   CONSTRAINT buyers_pkey PRIMARY KEY (id)
 );
@@ -71,7 +73,8 @@ CREATE TABLE public.qr_offers (
   status         text        NOT NULL DEFAULT 'active',
   seller_wallet  text        REFERENCES sellers(wallet_address),
   fee_bps        bigint      NOT NULL DEFAULT 0,
-  quantity       integer     NOT NULL DEFAULT 1,
+  unlimited      boolean     NOT NULL DEFAULT true,
+  quantity       integer     NOT NULL DEFAULT 2147483647,
   quantity_sold  integer     NOT NULL DEFAULT 0,
   created_at     timestamptz DEFAULT now(),
   CONSTRAINT qr_offers_pkey PRIMARY KEY (id)
@@ -140,6 +143,10 @@ CREATE POLICY "sellers can read own transactions"
     )
   );
 
+-- Publish for Realtime so the seller dashboard's Transactions tab updates live
+-- when a buy lands. RLS above scopes delivery to the seller's own offers.
+ALTER PUBLICATION supabase_realtime ADD TABLE qr_transactions;
+
 -- ─── qr_ephemeral ────────────────────────────────────────────────────────────
 CREATE TABLE public.qr_ephemeral (
   id             uuid        PRIMARY KEY, -- this maps to your ephemeral_uuid
@@ -160,7 +167,8 @@ CREATE TABLE public.qr_counteroffers (
   ephemeral_id   uuid        NOT NULL,
   buyer_wallet   text        NOT NULL,
   tx_signature   text        NOT NULL UNIQUE,
-  amount         bigint      NOT NULL,
+  seller_amount  bigint      NOT NULL,
+  fee_amount     bigint      NOT NULL,
   quantity       integer     NOT NULL DEFAULT 1,
   status         text        NOT NULL DEFAULT 'active',
   rent_returned  boolean     NOT NULL DEFAULT false,
@@ -194,6 +202,63 @@ CREATE POLICY "buyers can read own counteroffers"
   );
 
 ALTER PUBLICATION supabase_realtime ADD TABLE qr_counteroffers;
+
+-- ─── qr_counteroffers_seller_state ───────────────────────────────────────────
+-- Seller-owned per-counteroffer state. qr_counteroffers itself stays
+-- backend-write-only — sellers never get write access to it. This table is the
+-- only counteroffer-related surface a seller can mutate, and it carries no
+-- sensitive data, so the blast radius of any seller write is just their own
+-- view state.
+--
+-- The only state today is "hidden", encoded by row PRESENCE: a row here means
+-- that counteroffer is hidden from the seller's active list; no row means shown
+-- (the default — the table starts empty). Future seller-only flags (pinned,
+-- seen, notes…) can be added here as columns.
+CREATE TABLE public.qr_counteroffers_seller_state (
+  counteroffer_id uuid PRIMARY KEY REFERENCES qr_counteroffers(id) ON DELETE CASCADE
+);
+
+ALTER TABLE qr_counteroffers_seller_state ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON qr_counteroffers_seller_state FROM anon;
+
+-- A seller may read/insert/delete a row only for a counteroffer that belongs to
+-- one of their own offers. There are no updatable columns, so no UPDATE policy.
+CREATE POLICY "sellers read own counteroffer state"
+  ON qr_counteroffers_seller_state FOR SELECT TO authenticated
+  USING (
+    counteroffer_id IN (
+      SELECT co.id FROM qr_counteroffers co
+      JOIN qr_offers o ON o.id = co.offer_id
+      WHERE o.seller_wallet IN (
+        SELECT wallet_address FROM sellers WHERE user_id = auth.uid()
+      )
+    )
+  );
+
+CREATE POLICY "sellers hide own counteroffers"
+  ON qr_counteroffers_seller_state FOR INSERT TO authenticated
+  WITH CHECK (
+    counteroffer_id IN (
+      SELECT co.id FROM qr_counteroffers co
+      JOIN qr_offers o ON o.id = co.offer_id
+      WHERE o.seller_wallet IN (
+        SELECT wallet_address FROM sellers WHERE user_id = auth.uid()
+      )
+    )
+  );
+
+CREATE POLICY "sellers unhide own counteroffers"
+  ON qr_counteroffers_seller_state FOR DELETE TO authenticated
+  USING (
+    counteroffer_id IN (
+      SELECT co.id FROM qr_counteroffers co
+      JOIN qr_offers o ON o.id = co.offer_id
+      WHERE o.seller_wallet IN (
+        SELECT wallet_address FROM sellers WHERE user_id = auth.uid()
+      )
+    )
+  );
 
 -- ─── qr_accepted_counter ─────────────────────────────────────────────────────
 -- Ephemeral witness table for a seller accepting one or more counter offers.

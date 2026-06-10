@@ -14,6 +14,8 @@ import {
 } from "../supabase/offers/offers";
 import {
   getCounterOffersByOffer,
+  hideCounterOffers,
+  unhideCounterOffers,
   watchCounterOfferStatuses,
   watchNewCounterOffers,
 } from "../supabase/offers/getCounterOffers";
@@ -65,6 +67,7 @@ export default function OfferDetail() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
   const [counterOffers, setCounterOffers] = useState<CounterOffer[]>([]);
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [accepting, setAccepting] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -86,7 +89,10 @@ export default function OfferDetail() {
       .catch(console.error)
       .finally(() => setLoading(false));
     getCounterOffersByOffer(offerId)
-      .then(setCounterOffers)
+      .then(({ visible, hiddenIds }) => {
+        setCounterOffers(visible);
+        setHiddenIds(hiddenIds);
+      })
       .catch(console.error);
   }, [offerId, primaryWallet?.address, navigate]);
 
@@ -290,6 +296,46 @@ export default function OfferDetail() {
     handleAccept([...selectedIds]);
   }
 
+  async function handleHide(id: string) {
+    try {
+      await hideCounterOffers([id]);
+      setCounterOffers((prev) => prev.filter((co) => co.id !== id));
+      setHiddenIds((prev) => [...prev, id]);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    } catch (err) {
+      console.error("Failed to hide counter offer", err);
+    }
+  }
+
+  async function handleHideSelected() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    try {
+      await hideCounterOffers(ids);
+      setCounterOffers((prev) => prev.filter((co) => !selectedIds.has(co.id)));
+      setHiddenIds((prev) => [...prev, ...ids]);
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error("Failed to hide selected counter offers", err);
+    }
+  }
+
+  async function handleShowHidden() {
+    if (!offerId || hiddenIds.length === 0) return;
+    try {
+      await unhideCounterOffers(hiddenIds);
+      const { visible, hiddenIds: hi } = await getCounterOffersByOffer(offerId);
+      setCounterOffers(visible);
+      setHiddenIds(hi);
+    } catch (err) {
+      console.error("Failed to show hidden counter offers", err);
+    }
+  }
+
   function formatDate(iso: string) {
     const d = new Date(iso);
     return `${d.getDate().toString().padStart(2, "0")}.${(d.getMonth() + 1).toString().padStart(2, "0")}.${d.getFullYear()}`;
@@ -357,7 +403,7 @@ export default function OfferDetail() {
         </div>
         <button
           className={s.signOutButton}
-          onClick={() => navigate("/dashboard")}
+          onClick={() => navigate("/seller")}
         >
           ← Back
         </button>
@@ -375,8 +421,7 @@ export default function OfferDetail() {
               </div>
               <p className={s.offerPrice}>{priceSOL} SOL</p>
               <p className={s.offerQuantity}>
-                {offer.quantity - offer.quantity_sold} of {offer.quantity}{" "}
-                remaining
+                {offer.unlimited ? 'Unlimited' : `${offer.quantity - offer.quantity_sold} of ${offer.quantity} remaining`}
               </p>
             </div>
             <div className={s.offerCardRight}>
@@ -425,60 +470,18 @@ export default function OfferDetail() {
             </button>
           </div>
 
-          {counterOffers.length > 0 && (
+          {(counterOffers.length > 0 || hiddenIds.length > 0) && (
             <section className={s.counterOffersSection}>
               <div className={s.counterOffersHeader}>
                 <h2 className={s.counterOffersTitle}>Counter offers</h2>
-                <div className={s.counterOffersStats}>
-                  <div className={s.counterOffersStat}>
-                    <span className={s.counterOffersStatLabel}>
-                      Expiring in 7 days
-                    </span>
-                    <span className={s.counterOffersStatValue}>
-                      {(
-                        counterOffers
-                          .filter(
-                            (co) =>
-                              co.status === "active" &&
-                              isExpiringSoon(co.expiry_at),
-                          )
-                          .reduce((sum, co) => sum + co.amount, 0) /
-                        1_000_000_000
-                      ).toFixed(4)}{" "}
-                      SOL
-                    </span>
-                  </div>
-                  <div className={s.counterOffersStat}>
-                    <span className={s.counterOffersStatLabel}>
-                      Total if accepted
-                    </span>
-                    <span className={s.counterOffersStatValue}>
-                      {(
-                        counterOffers
-                          .filter((co) => co.status === "active")
-                          .reduce((sum, co) => sum + co.amount, 0) /
-                        1_000_000_000
-                      ).toFixed(4)}{" "}
-                      SOL
-                    </span>
-                  </div>
-                  <div className={s.counterOffersActions}>
-                    <button
-                      className={s.acceptSelectedButton}
-                      disabled={accepting || selectedIds.size === 0}
-                      onClick={handleAcceptSelected}
-                    >
-                      {accepting ? "Accepting…" : "Accept selected"}
-                    </button>
-                    <button
-                      className={s.acceptAllButton}
-                      disabled={accepting}
-                      onClick={handleAcceptAll}
-                    >
-                      {accepting ? "Accepting…" : "Accept all"}
-                    </button>
-                  </div>
-                </div>
+                {hiddenIds.length > 0 && (
+                  <button
+                    className={s.unhideAllBtn}
+                    onClick={handleShowHidden}
+                  >
+                    Show hidden ({hiddenIds.length})
+                  </button>
+                )}
               </div>
               {(() => {
                 const hasSelection = selectedIds.size > 0;
@@ -489,7 +492,7 @@ export default function OfferDetail() {
                   ? counterOffers.filter((co) => selectedIds.has(co.id))
                   : activeOffers;
                 const totalAmount = displayed.reduce(
-                  (sum, co) => sum + co.amount,
+                  (sum, co) => sum + co.seller_amount + co.fee_amount,
                   0,
                 );
                 const totalQty = displayed.reduce(
@@ -499,35 +502,57 @@ export default function OfferDetail() {
                 const avgPrice = totalQty > 0 ? totalAmount / totalQty : 0;
                 return (
                   <div className={s.selectionSummary}>
-                    <div className={s.selectionSummaryItem}>
-                      <span className={s.selectionSummaryLabel}>
-                        {hasSelection
-                          ? "Selected offers"
-                          : "If accepting all offers"}
-                      </span>
-                      <span className={s.selectionSummaryValue}>
-                        {displayed.length}
-                      </span>
+                    <div className={s.selectionSummaryStats}>
+                      <div className={s.selectionSummaryItem}>
+                        <span className={s.selectionSummaryLabel}>
+                          {hasSelection
+                            ? "Total selected offers"
+                            : "Total active offers"}
+                        </span>
+                        <span className={s.selectionSummaryValue}>
+                          {displayed.length}
+                        </span>
+                      </div>
+                      <div className={s.selectionSummaryItem}>
+                        <span className={s.selectionSummaryLabel}>
+                          Avg. Price
+                        </span>
+                        <span className={s.selectionSummaryValue}>
+                          {(avgPrice / 1_000_000_000).toFixed(4)} SOL
+                        </span>
+                      </div>
+                      <div className={s.selectionSummaryItem}>
+                        <span className={s.selectionSummaryLabel}>
+                          Total received
+                        </span>
+                        <span
+                          className={`${s.selectionSummaryValue} ${s.selectionSummaryTotal}`}
+                        >
+                          {(totalAmount / 1_000_000_000).toFixed(4)} SOL
+                        </span>
+                      </div>
                     </div>
-                    <div className={s.selectionSummarySep} />
-                    <div className={s.selectionSummaryItem}>
-                      <span className={s.selectionSummaryLabel}>
-                        Avg price / product
-                      </span>
-                      <span className={s.selectionSummaryValue}>
-                        {(avgPrice / 1_000_000_000).toFixed(4)} SOL
-                      </span>
-                    </div>
-                    <div className={s.selectionSummarySep} />
-                    <div className={s.selectionSummaryItem}>
-                      <span className={s.selectionSummaryLabel}>
-                        You will receive
-                      </span>
-                      <span
-                        className={`${s.selectionSummaryValue} ${s.selectionSummaryTotal}`}
+                    <div className={s.selectionSummaryActions}>
+                      <button
+                        className={s.summaryHideButton}
+                        disabled={selectedIds.size === 0}
+                        onClick={handleHideSelected}
                       >
-                        {(totalAmount / 1_000_000_000).toFixed(4)} SOL
-                      </span>
+                        Hide selected
+                      </button>
+                      <button
+                        className={s.summaryAcceptButton}
+                        disabled={accepting || displayed.length === 0}
+                        onClick={
+                          hasSelection ? handleAcceptSelected : handleAcceptAll
+                        }
+                      >
+                        {accepting
+                          ? "Accepting…"
+                          : hasSelection
+                            ? "Accept selected"
+                            : "Accept all"}
+                      </button>
                     </div>
                   </div>
                 );
@@ -538,7 +563,7 @@ export default function OfferDetail() {
                     return 1;
                   if (a.status !== "confirmed" && b.status === "confirmed")
                     return -1;
-                  return b.amount - a.amount;
+                  return (b.seller_amount + b.fee_amount) - (a.seller_amount + a.fee_amount);
                 })
                 .map((co) => (
                   <div
@@ -553,7 +578,7 @@ export default function OfferDetail() {
                         From wallet: {shortWallet(co.buyer_wallet)}
                       </span>
                       <span className={s.counterOfferAmount}>
-                        {(co.amount / 1_000_000_000).toFixed(4)} SOL
+                        {((co.seller_amount + co.fee_amount) / 1_000_000_000).toFixed(4)} SOL
                       </span>
                       <span className={s.counterOfferExpiry}>
                         Expire on {formatDate(co.expiry_at)}
@@ -577,6 +602,12 @@ export default function OfferDetail() {
                               ? "expiring soon"
                               : "active"}
                           </span>
+                          <button
+                            className={s.declineButton}
+                            onClick={() => handleHide(co.id)}
+                          >
+                            Hide
+                          </button>
                           <button
                             className={s.acceptButton}
                             disabled={accepting}

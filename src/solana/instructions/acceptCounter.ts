@@ -22,17 +22,20 @@ export async function acceptCounter(
 
   const sellerBytes = wallet.publicKey.toBytes()
   const uuidBytes = uuidToBytes(auth.ephemeralUuid)
-  const amountBytes = new Uint8Array(8)
+  const sellerAmountBytes = new Uint8Array(8)
+  const feeAmountBytes = new Uint8Array(8)
   const expiryBytes = new Uint8Array(8)
-  new DataView(amountBytes.buffer).setBigUint64(0, BigInt(auth.totalAmount), true)
+  new DataView(sellerAmountBytes.buffer).setBigUint64(0, BigInt(auth.sellerAmount), true)
+  new DataView(feeAmountBytes.buffer).setBigUint64(0, BigInt(auth.feeAmount), true)
   new DataView(expiryBytes.buffer).setBigInt64(0, BigInt(auth.expiry), true)
 
-  // Message layout: seller(32) | uuid(16) | amount(8 LE) | expiry(8 LE)
-  const message = new Uint8Array(64)
+  // Message layout: seller(32) | uuid(16) | seller_amount(8 LE) | fee_amount(8 LE) | expiry(8 LE)
+  const message = new Uint8Array(72)
   message.set(sellerBytes, 0)
   message.set(uuidBytes, 32)
-  message.set(amountBytes, 48)
-  message.set(expiryBytes, 56)
+  message.set(sellerAmountBytes, 48)
+  message.set(feeAmountBytes, 56)
+  message.set(expiryBytes, 64)
 
   const ed25519Ix = Ed25519Program.createInstructionWithPublicKey({
     publicKey: new PublicKey(auth.backendPublicKey).toBytes(),
@@ -44,7 +47,7 @@ export async function acceptCounter(
 
   const program = getProgram(connection, wallet)
   const acceptIx = await program.methods
-    .acceptOffer(Array.from(uuidBytes), new BN(auth.totalAmount), new BN(auth.expiry))
+    .acceptOffer(Array.from(uuidBytes), new BN(auth.sellerAmount), new BN(auth.feeAmount), new BN(auth.expiry))
     .accounts({
       seller: wallet.publicKey,
       config: configPda,

@@ -27,6 +27,7 @@
         },
         {
           "name": "config",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -81,7 +82,11 @@
           }
         },
         {
-          "name": "total_amount",
+          "name": "seller_amount",
+          "type": "u64"
+        },
+        {
+          "name": "fee_amount",
           "type": "u64"
         },
         {
@@ -877,7 +882,11 @@
             "type": "pubkey"
           },
           {
-            "name": "total_amount",
+            "name": "seller_amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee_amount",
             "type": "u64"
           },
           {

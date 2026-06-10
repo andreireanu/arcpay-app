@@ -8,6 +8,7 @@ import { getOffer } from "../supabase/offers/offers";
 import { submitCounterOffer } from "../supabase/offers/counterOffers";
 import { cancelCounterOffer } from "../supabase/offers/cancelCounterOffer";
 import { getCounterOfferByBuyer, watchCounterOfferStatuses, watchBuyerCounterOfferInsert } from "../supabase/offers/getCounterOffers";
+import { registerBuyer } from "../supabase/buyers/buyers";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
 import type { CounterOffer } from "../types/counterOffer";
 import { buy } from "../solana/instructions/buy";
@@ -85,6 +86,7 @@ export default function Pay() {
     } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
     try {
       await buy(connection, anchorWallet, offerId);
+      await registerBuyer(primaryWallet.address);
     } finally {
       setBuying(false);
     }
@@ -105,6 +107,7 @@ export default function Pay() {
         signAllTransactions: signer.signAllTransactions.bind(signer),
       } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
       await submitCounterOffer(connection, anchorWallet, offerId, lamports);
+      await registerBuyer(primaryWallet.address);
       setSubmitted(true);
       setCounterOfferOpen(false);
       setCounterPrice("");
@@ -221,7 +224,7 @@ export default function Pay() {
                     Your active offer made:
                   </span>
                   <span className={s.activeOfferAmount}>
-                    {(activeCounterOffer.amount / 1_000_000_000).toFixed(4)} SOL
+                    {((activeCounterOffer.seller_amount + activeCounterOffer.fee_amount) / 1_000_000_000).toFixed(4)} SOL
                   </span>
                   <div className={s.activeOfferActions}>
                     <button

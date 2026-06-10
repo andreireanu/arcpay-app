@@ -1,17 +1,12 @@
-export interface CounterOffer {
+export interface Transaction {
   id: string;
   offer_id: string;
-  ephemeral_id: string;
+  offer_name: string;
   buyer_wallet: string;
   tx_signature: string;
   seller_amount: number;
   fee_amount: number;
   quantity: number;
-  status:
-    | "active"
-    | "confirmed"
-    | "buyer_canceled"
-    | "seller_canceled";
   created_at: string;
-  expiry_at: string;
+  source: "buy" | "counter_offer";
 }

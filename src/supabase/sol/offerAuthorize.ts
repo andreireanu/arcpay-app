@@ -1,4 +1,4 @@
-import { config } from '../../config/env'
+import { supabase } from '../client'
 
 export interface OfferAuth {
   ephemeralUuid: string
@@ -13,11 +13,11 @@ export async function getOfferAuth(
   buyerWallet: string,
   amountLamports: number,
 ): Promise<OfferAuth> {
-  const res = await fetch(`${config.supabase.url}/functions/v1/sol-counteroffer-authorize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': config.supabase.anonKey },
-    body: JSON.stringify({ offer_id: offerId, buyer_wallet: buyerWallet, amount_lamports: amountLamports }),
+  // invoke() attaches the bearer token so the function can run with JWT
+  // verification on, matching the other authorize functions.
+  const { data, error } = await supabase.functions.invoke('sol-counteroffer-authorize', {
+    body: { offer_id: offerId, buyer_wallet: buyerWallet, amount_lamports: amountLamports },
   })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  if (error) throw error
+  return data as OfferAuth
 }
