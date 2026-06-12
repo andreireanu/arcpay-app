@@ -22,18 +22,21 @@ export async function submitOffer(
   const auth = await getOfferAuth(offerId, wallet.publicKey.toBase58(), amountLamports)
 
   const buyerBytes = wallet.publicKey.toBytes()
+  const sellerPubkey = new PublicKey(auth.sellerWallet)
   const uuidBytes = uuidToBytes(auth.ephemeralUuid)
   const amountBytes = new Uint8Array(8)
   const expiryBytes = new Uint8Array(8)
   new DataView(amountBytes.buffer).setBigUint64(0, BigInt(amountLamports), true)
   new DataView(expiryBytes.buffer).setBigInt64(0, BigInt(auth.expiry), true)
 
-  // Message layout matching auth_offer.rs: buyer(32) | uuid(16) | amount(8 LE) | expiry(8 LE)
-  const message = new Uint8Array(64)
+  // Message layout matching auth_offer.rs:
+  // buyer(32) | seller(32) | uuid(16) | amount(8 LE) | expiry(8 LE)
+  const message = new Uint8Array(96)
   message.set(buyerBytes, 0)
-  message.set(uuidBytes, 32)
-  message.set(amountBytes, 48)
-  message.set(expiryBytes, 56)
+  message.set(sellerPubkey.toBytes(), 32)
+  message.set(uuidBytes, 64)
+  message.set(amountBytes, 80)
+  message.set(expiryBytes, 88)
 
   const ed25519Ix = Ed25519Program.createInstructionWithPublicKey({
     publicKey: new PublicKey(auth.backendPublicKey).toBytes(),
@@ -42,8 +45,6 @@ export async function submitOffer(
   })
 
   const [configPda] = PublicKey.findProgramAddressSync([Buffer.from('config')], PROGRAM_ID)
-  const sellerPubkey = new PublicKey(auth.sellerWallet)
-  const [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from('vault'), sellerPubkey.toBytes()], PROGRAM_ID)
   const [offerRecordPda] = PublicKey.findProgramAddressSync([Buffer.from('offer'), uuidBytes], PROGRAM_ID)
 
   const program = getProgram(connection, wallet)
@@ -53,7 +54,6 @@ export async function submitOffer(
       buyer: wallet.publicKey,
       seller: sellerPubkey,
       config: configPda,
-      vault: vaultPda,
       offerRecord: offerRecordPda,
       instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
     })

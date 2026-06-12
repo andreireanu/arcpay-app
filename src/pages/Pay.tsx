@@ -128,7 +128,7 @@ export default function Pay() {
         signTransaction: signer.signTransaction.bind(signer),
         signAllTransactions: signer.signAllTransactions.bind(signer),
       } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await cancelCounterOffer(connection, anchorWallet, activeCounterOffer.ephemeral_id, offer!.seller_wallet!);
+      await cancelCounterOffer(connection, anchorWallet, activeCounterOffer.ephemeral_id);
       setActiveCounterOffer(null);
     } catch (err) {
       console.error("Failed to cancel offer", err);

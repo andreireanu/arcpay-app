@@ -5,8 +5,6 @@ export interface AcceptCounterAuth {
   signature: string
   expiry: number
   backendPublicKey: string
-  sellerAmount: number
-  feeAmount: number
 }
 
 export async function getAcceptCounterAuth(

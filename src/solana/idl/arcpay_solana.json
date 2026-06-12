@@ -22,12 +22,10 @@
       "accounts": [
         {
           "name": "seller",
-          "writable": true,
           "signer": true
         },
         {
           "name": "config",
-          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -40,28 +38,6 @@
                   105,
                   103
                 ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "seller"
               }
             ]
           }
@@ -82,30 +58,22 @@
           }
         },
         {
-          "name": "seller_amount",
-          "type": "u64"
-        },
-        {
-          "name": "fee_amount",
-          "type": "u64"
-        },
-        {
           "name": "expiry",
           "type": "i64"
         }
       ]
     },
     {
-      "name": "admin_refund_offer",
+      "name": "admin_settle_offer",
       "discriminator": [
-        121,
-        27,
-        20,
-        231,
-        141,
-        218,
-        240,
-        171
+        21,
+        167,
+        195,
+        75,
+        125,
+        221,
+        251,
+        30
       ],
       "accounts": [
         {
@@ -115,6 +83,7 @@
         },
         {
           "name": "config",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -158,13 +127,8 @@
           "writable": true
         },
         {
-          "name": "vault",
-          "docs": [
-            "None for the accepted offer case (amount already paid to seller, only rent returned).",
-            "Some for the listing cancel case (amount + rent returned to buyer)."
-          ],
-          "writable": true,
-          "optional": true
+          "name": "seller",
+          "writable": true
         },
         {
           "name": "system_program",
@@ -180,6 +144,14 @@
               16
             ]
           }
+        },
+        {
+          "name": "to_seller",
+          "type": "bool"
+        },
+        {
+          "name": "fee_amount",
+          "type": "u64"
         }
       ]
     },
@@ -276,9 +248,6 @@
           "signer": true
         },
         {
-          "name": "seller"
-        },
-        {
           "name": "offer_record",
           "writable": true,
           "pda": {
@@ -296,28 +265,6 @@
               {
                 "kind": "arg",
                 "path": "uuid"
-              }
-            ]
-          }
-        },
-        {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "seller"
               }
             ]
           }
@@ -419,28 +366,6 @@
                   105,
                   103
                 ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "seller"
               }
             ]
           }
@@ -602,19 +527,6 @@
         61,
         191
       ]
-    },
-    {
-      "name": "SellerVault",
-      "discriminator": [
-        40,
-        215,
-        104,
-        97,
-        10,
-        251,
-        107,
-        143
-      ]
     }
   ],
   "events": [
@@ -658,16 +570,16 @@
       ]
     },
     {
-      "name": "OfferAdminRefunded",
+      "name": "OfferBought",
       "discriminator": [
-        125,
-        70,
-        31,
-        164,
-        58,
-        55,
-        58,
-        39
+        2,
+        15,
+        52,
+        166,
+        230,
+        17,
+        143,
+        33
       ]
     },
     {
@@ -684,6 +596,19 @@
       ]
     },
     {
+      "name": "OfferRefunded",
+      "discriminator": [
+        132,
+        208,
+        236,
+        25,
+        125,
+        249,
+        160,
+        13
+      ]
+    },
+    {
       "name": "SellerOfferCanceled",
       "discriminator": [
         78,
@@ -695,81 +620,38 @@
         88,
         176
       ]
-    },
-    {
-      "name": "WalletRegistered",
-      "discriminator": [
-        172,
-        237,
-        84,
-        96,
-        15,
-        211,
-        154,
-        184
-      ]
     }
   ],
   "errors": [
     {
       "code": 6000,
-      "name": "AlreadyRegistered",
-      "msg": "Wallet already registered"
+      "name": "Unauthorized",
+      "msg": "Unauthorized"
     },
     {
       "code": 6001,
-      "name": "NotRegistered",
-      "msg": "Wallet not registered"
-    },
-    {
-      "code": 6002,
-      "name": "Unauthorized",
-      "msg": "Unauthorized: admin only"
-    },
-    {
-      "code": 6003,
-      "name": "InvalidCommission",
-      "msg": "Commission must be between 0 and 10000 basis points"
-    },
-    {
-      "code": 6004,
-      "name": "ListingNotActive",
-      "msg": "Listing is not active"
-    },
-    {
-      "code": 6005,
       "name": "AuthorizationExpired",
       "msg": "Authorization signature has expired"
     },
     {
-      "code": 6006,
+      "code": 6002,
       "name": "MissingEd25519Instruction",
-      "msg": "Ed25519 instruction missing or not at index 0"
+      "msg": "Ed25519 signature verification instruction missing"
     },
     {
-      "code": 6007,
+      "code": 6003,
       "name": "InvalidAuthorizationSignature",
       "msg": "Invalid backend authorization signature"
     },
     {
-      "code": 6008,
+      "code": 6004,
       "name": "InsufficientCommissionBalance",
       "msg": "Withdrawal amount exceeds available commission balance"
     },
     {
-      "code": 6009,
+      "code": 6005,
       "name": "InvalidAmount",
-      "msg": "Amount must be greater than zero"
-    },
-    {
-      "code": 6010,
-      "name": "NotBuyer",
-      "msg": "Unauthorized: not the offer buyer"
-    },
-    {
-      "code": 6011,
-      "name": "InsufficientVaultBalance",
-      "msg": "Insufficient vault balance"
+      "msg": "Invalid amount"
     }
   ],
   "types": [
@@ -882,14 +764,6 @@
             "type": "pubkey"
           },
           {
-            "name": "seller_amount",
-            "type": "u64"
-          },
-          {
-            "name": "fee_amount",
-            "type": "u64"
-          },
-          {
             "name": "timestamp",
             "type": "i64"
           }
@@ -897,7 +771,11 @@
       }
     },
     {
-      "name": "OfferAdminRefunded",
+      "name": "OfferBought",
+      "docs": [
+        "Backend-driven settlement of an accepted offer: escrow paid out to the seller",
+        "(minus fee)."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -919,7 +797,11 @@
             "type": "pubkey"
           },
           {
-            "name": "amount",
+            "name": "seller_amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee_amount",
             "type": "u64"
           },
           {
@@ -983,6 +865,43 @@
       }
     },
     {
+      "name": "OfferRefunded",
+      "docs": [
+        "Backend-driven refund of an offer (listing cancel / expiry): escrow returned",
+        "to the buyer."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "uuid",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "SellerOfferCanceled",
       "type": {
         "kind": "struct",
@@ -999,51 +918,6 @@
           {
             "name": "seller",
             "type": "pubkey"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "SellerVault",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "seller",
-            "type": "pubkey"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "WalletRegistered",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "user_profile",
-            "type": "pubkey"
-          },
-          {
-            "name": "wallet",
-            "type": "pubkey"
-          },
-          {
-            "name": "uuid",
-            "type": {
-              "array": [
-                "u8",
-                16
-              ]
-            }
           },
           {
             "name": "timestamp",

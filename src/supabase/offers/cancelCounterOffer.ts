@@ -6,7 +6,6 @@ export async function cancelCounterOffer(
   connection: Connection,
   wallet: AnchorWallet,
   ephemeralId: string,
-  sellerWallet: string,
 ): Promise<string> {
-  return cancelOffer(connection, wallet, ephemeralId, sellerWallet)
+  return cancelOffer(connection, wallet, ephemeralId)
 }

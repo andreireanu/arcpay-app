@@ -590,7 +590,7 @@ export default function SellerDashboard() {
                 <p className={s.offersEmpty}>No active counter offers.</p>
               ) : (
                 allCounterOffers.map((co) => {
-                  const profitLamports = co.fee_amount
+                  const profitLamports = co.seller_amount
                   const offerName = offers.find((o) => o.id === co.offer_id)?.name ?? ''
                   return (
                     <div key={co.id} className={s.coListRow}>
