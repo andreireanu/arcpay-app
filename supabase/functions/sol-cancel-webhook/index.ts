@@ -7,8 +7,8 @@ import {
 import {
   BATCH_SIZE,
   NETWORK_FEE_PER_TX,
-  sendAdminRefunds,
-} from "../_sol-shared/sendAdminRefunds.ts";
+  sendAdminSettles,
+} from "../_sol-shared/sendAdminSettles.ts";
 
 async function getDiscriminator(eventName: string): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(
@@ -198,7 +198,10 @@ Deno.serve(async (req) => {
           );
         }
 
-        const { signatures, errors } = await sendAdminRefunds(
+        // toSeller: false — escrow back to each buyer. The sender pre-filters
+        // records against the chain (a buyer who already self-canceled would
+        // otherwise fail the whole atomic batch) and retries survivors.
+        const { signatures, dropped, errors } = await sendAdminSettles(
           connection,
           backendKeypair,
           programId,
@@ -206,11 +209,19 @@ Deno.serve(async (req) => {
             ephemeralId: co.ephemeral_id,
             buyerWallet: co.buyer_wallet,
             sellerWallet,
+            toSeller: false,
+            feeAmount: 0,
           })),
         );
 
         if (signatures.length)
           console.log("admin refunds sent", offerIdUuid, signatures);
+        if (dropped.length)
+          console.warn(
+            "records already consumed on chain, skipped",
+            offerIdUuid,
+            dropped.map((d) => d.ephemeralId),
+          );
         if (errors.length)
           console.error("admin refund errors", offerIdUuid, errors);
       }

@@ -57,11 +57,11 @@ Deno.serve(async (req) => {
   );
 
   // Fetch all counter offers and join with their parent offer to verify seller
-  // ownership. The seller/fee split was already computed and stored when the
-  // counter offer was registered, so we just read it back here.
+  // ownership. No amounts are signed: the accept is a consent-only event, and
+  // settlement reads each record's escrow + the stored fee split per offer.
   const { data: counterOffers, error: fetchError } = await supabase
     .from("qr_counteroffers")
-    .select("id, seller_amount, fee_amount, status, expiry_at, offer_id, qr_offers(seller_wallet)")
+    .select("id, status, expiry_at, offer_id, qr_offers(seller_wallet)")
     .in("id", counter_offer_ids);
 
   if (fetchError || !counterOffers) {
@@ -73,10 +73,6 @@ Deno.serve(async (req) => {
     return new Response("One or more counter offers not found", { status: 404, headers: CORS });
   }
 
-  // Sum the stored seller/fee split across all accepted offers. Mirrors the buy
-  // flow's seller_amount / fee_amount split.
-  let sellerAmount = 0;
-  let feeAmount = 0;
   for (const co of counterOffers) {
     const offer = co.qr_offers as { seller_wallet: string } | null;
     if (offer?.seller_wallet !== seller_wallet) {
@@ -88,8 +84,6 @@ Deno.serve(async (req) => {
     if (new Date(co.expiry_at) <= new Date()) {
       return new Response(`Counter offer ${co.id} has expired`, { status: 400, headers: CORS });
     }
-    sellerAmount += co.seller_amount;
-    feeAmount += co.fee_amount;
   }
 
   // Insert witness row — id is the ephemeral UUID passed to the program
@@ -111,25 +105,17 @@ Deno.serve(async (req) => {
 
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 300); // 5-minute window
 
-  // Message layout (72 bytes):
+  // Message layout (56 bytes) matching auth_accept_offer.rs:
   //   [0..32]  seller pubkey
   //   [32..48] ephemeral uuid (16 bytes)
-  //   [48..56] seller_amount (u64 LE)
-  //   [56..64] fee_amount (u64 LE)
-  //   [64..72] expiry (i64 LE)
-  const sellerAmountBytes = new Uint8Array(8);
-  const feeAmountBytes = new Uint8Array(8);
+  //   [48..56] expiry (i64 LE)
   const expiryBytes = new Uint8Array(8);
-  new DataView(sellerAmountBytes.buffer).setBigUint64(0, BigInt(sellerAmount), true);
-  new DataView(feeAmountBytes.buffer).setBigUint64(0, BigInt(feeAmount), true);
   new DataView(expiryBytes.buffer).setBigInt64(0, expiry, true);
 
-  const message = new Uint8Array(72);
+  const message = new Uint8Array(56);
   message.set(pubkeyToBytes(seller_wallet), 0);
   message.set(uuidToBytes(ephemeralUuid), 32);
-  message.set(sellerAmountBytes, 48);
-  message.set(feeAmountBytes, 56);
-  message.set(expiryBytes, 64);
+  message.set(expiryBytes, 48);
 
   const signature = nacl.sign.detached(message, keypairBytes);
 
@@ -138,7 +124,5 @@ Deno.serve(async (req) => {
     signature: btoa(String.fromCharCode(...signature)),
     expiry: Number(expiry),
     backendPublicKey: base58Encode(publicKeyBytes),
-    sellerAmount,
-    feeAmount,
   }, { headers: CORS });
 });

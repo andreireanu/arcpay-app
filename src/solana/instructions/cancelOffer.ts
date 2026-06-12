@@ -11,26 +11,23 @@ function uuidToBytes(uuid: string): Uint8Array {
   return bytes
 }
 
+// Permissionless: escrow lives in the offer record itself, so `close = buyer`
+// returns amount + rent in one sweep. No seller/vault accounts involved.
 export async function cancelOffer(
   connection: Connection,
   wallet: AnchorWallet,
   ephemeralId: string,
-  sellerWallet: string,
 ): Promise<string> {
   const uuidBytes = uuidToBytes(ephemeralId)
-  const sellerPubkey = new PublicKey(sellerWallet)
 
   const [offerRecordPda] = PublicKey.findProgramAddressSync([Buffer.from('offer'), uuidBytes], PROGRAM_ID)
-  const [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from('vault'), sellerPubkey.toBytes()], PROGRAM_ID)
 
   const program = getProgram(connection, wallet)
   const cancelIx = await program.methods
     .buyerCancelOffer(Array.from(uuidBytes))
     .accounts({
       buyer: wallet.publicKey,
-      seller: sellerPubkey,
       offerRecord: offerRecordPda,
-      vault: vaultPda,
     })
     .instruction()
 

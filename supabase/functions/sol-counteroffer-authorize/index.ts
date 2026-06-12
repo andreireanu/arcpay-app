@@ -81,21 +81,25 @@ Deno.serve(async (req) => {
 
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 300); // 5-minute window
 
-  // Message layout (64 bytes) matching auth_offer.rs:
+  // Message layout (96 bytes) matching auth_offer.rs:
   //   [0..32]  buyer pubkey
-  //   [32..48] ephemeral uuid (16 bytes)
-  //   [48..56] amount (u64 LE)
-  //   [56..64] expiry (i64 LE)
+  //   [32..64] seller pubkey — binds the escrow's payout target; without it a
+  //            malicious client could create a record whose seller differs from
+  //            the listing's, and settlement pays record.seller
+  //   [64..80] ephemeral uuid (16 bytes)
+  //   [80..88] amount (u64 LE)
+  //   [88..96] expiry (i64 LE)
   const amountBytes = new Uint8Array(8);
   const expiryBytes = new Uint8Array(8);
   new DataView(amountBytes.buffer).setBigUint64(0, BigInt(amount_lamports), true);
   new DataView(expiryBytes.buffer).setBigInt64(0, expiry, true);
 
-  const message = new Uint8Array(64);
+  const message = new Uint8Array(96);
   message.set(pubkeyToBytes(buyer_wallet), 0);
-  message.set(uuidToBytes(ephemeralUuid), 32);
-  message.set(amountBytes, 48);
-  message.set(expiryBytes, 56);
+  message.set(pubkeyToBytes(offer.seller_wallet), 32);
+  message.set(uuidToBytes(ephemeralUuid), 64);
+  message.set(amountBytes, 80);
+  message.set(expiryBytes, 88);
 
   const signature = nacl.sign.detached(message, keypairBytes);
 

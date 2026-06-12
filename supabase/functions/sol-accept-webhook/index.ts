@@ -3,8 +3,8 @@ import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1";
 import {
   BATCH_SIZE,
   NETWORK_FEE_PER_TX,
-  sendAdminRefunds,
-} from "../_sol-shared/sendAdminRefunds.ts";
+  sendAdminSettles,
+} from "../_sol-shared/sendAdminSettles.ts";
 
 async function offerAcceptedDiscriminator(): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(
@@ -25,6 +25,28 @@ function bytesToUuid(bytes: Uint8Array): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
+const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function base58Encode(bytes: Uint8Array): string {
+  let n = bytes.reduce((acc, b) => acc * 256n + BigInt(b), 0n);
+  const chars: string[] = [];
+  while (n > 0n) {
+    chars.unshift(BASE58[Number(n % 58n)]);
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b !== 0) break;
+    chars.unshift("1");
+  }
+  return chars.join("");
+}
+
+// Settlement driver. The accept tx moved no funds — it is the seller's on-chain
+// consent for the witness uuid. This webhook turns that consent into one
+// admin_settle_offer per counter offer (batched, pre-filtered against the
+// chain). Counter offers are NOT marked confirmed here: that happens in the
+// settle webhook off each OfferBought event, so a crash mid-settlement loses
+// nothing — redelivery re-runs the driver and the chain filter skips whatever
+// already settled.
 Deno.serve(async (req) => {
   const secret = Deno.env.get("HELIUS_WEBHOOK_SECRET");
   if (secret && req.headers.get("authorization") !== secret) {
@@ -53,11 +75,12 @@ Deno.serve(async (req) => {
         (c) => c.charCodeAt(0),
       );
 
-      // OfferAccepted: 8 disc + 16 uuid + 32 seller + 8 seller_amount + 8 fee_amount + 8 timestamp = 80 bytes
-      if (bytes.length < 80 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
+      // OfferAccepted: 8 disc + 16 uuid + 32 seller + 8 timestamp = 64 bytes
+      if (bytes.length < 64 || !arraysEqual(bytes.slice(0, 8), disc)) continue;
 
       const ephemeralId = bytesToUuid(bytes.slice(8, 24));
-      console.log("offer_accepted event", ephemeralId);
+      const sellerWallet = base58Encode(bytes.slice(24, 56));
+      console.log("offer_accepted event", ephemeralId, "seller", sellerWallet);
 
       // Fetch the witness row to get the list of counter offer IDs
       const { data: witness, error: witnessError } = await supabase
@@ -75,81 +98,39 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      if (witness.status === "confirmed") {
-        console.warn("duplicate webhook delivery, skipping", ephemeralId);
+      if (witness.status === "completed") {
+        console.warn("witness already completed, skipping", ephemeralId);
         continue;
       }
 
       const counterOfferIds: string[] = witness.offers;
 
-      // Mark each counter offer as confirmed
-      const { error: coUpdateError } = await supabase
+      const { data: counteroffers_data, error: coError } = await supabase
         .from("qr_counteroffers")
-        .update({ status: "confirmed" })
+        .select("id, ephemeral_id, buyer_wallet, fee_amount, qr_offers(seller_wallet)")
         .in("id", counterOfferIds);
 
-      if (coUpdateError) {
-        console.error("qr_counteroffers update error", coUpdateError);
+      if (coError || !counteroffers_data || counteroffers_data.length === 0) {
+        console.error("qr_counteroffers fetch error", ephemeralId, coError);
         continue;
       }
 
-      // Mark the witness row as confirmed
-      const { error: witnessUpdateError } = await supabase
-        .from("qr_accepted_counter")
-        .update({ status: "confirmed" })
-        .eq("id", ephemeralId);
-
-      if (witnessUpdateError) {
-        console.error("qr_accepted_counter update error", witnessUpdateError);
-        continue;
-      }
-
-      // Fetch the confirmed counter offers' details (offer_id for the quantity
-      // bump, ephemeral_id + buyer_wallet for the rent refund).
-      const { data: counteroffers_data, error: offerIdError } = await supabase
-        .from("qr_counteroffers")
-        .select("ephemeral_id, buyer_wallet, offer_id")
-        .in("id", counterOfferIds);
-
-      if (offerIdError || !counteroffers_data || counteroffers_data.length === 0) {
-        console.error("qr_counteroffers details fetch error", offerIdError);
-        continue;
-      }
-
-      const { error: qtyError } = await supabase.rpc(
-        "increment_offer_quantity_sold_by",
-        {
-          p_offer_id: counteroffers_data[0].offer_id,
-          p_amount: counterOfferIds.length,
-        },
+      // The accept event's seller must own every counter offer in the witness —
+      // anything else means the witness and the on-chain consent disagree.
+      const mismatched = counteroffers_data.filter(
+        (co) =>
+          (co.qr_offers as { seller_wallet: string } | null)?.seller_wallet !==
+          sellerWallet,
       );
-      if (qtyError) console.error("quantity increment error", qtyError);
+      if (mismatched.length > 0) {
+        console.error(
+          "seller mismatch — refusing to settle",
+          ephemeralId,
+          mismatched.map((co) => co.id),
+        );
+        continue;
+      }
 
-      // Mark the accepted buyers confirmed (their rows were inserted with
-      // confirmed=false when they submitted the counter offer). Pure wallet-keyed
-      // flip — no user_id. Dedupe in case one buyer had multiple accepted offers.
-      const buyerWallets = [
-        ...new Set(counteroffers_data.map((co) => co.buyer_wallet)),
-      ];
-      const { error: buyerError } = await supabase
-        .from("buyers")
-        .update({ confirmed: true })
-        .in("wallet_address", buyerWallets);
-      if (buyerError) console.error("buyer confirm error", buyerError);
-
-      // Drop any seller hidden-markers for these now-confirmed counter offers
-      // (they're leaving the active list anyway).
-      const { error: hiddenDelError } = await supabase
-        .from("qr_counteroffers_seller_state")
-        .delete()
-        .in("counteroffer_id", counterOfferIds);
-      if (hiddenDelError)
-        console.error("seller_state cleanup error", hiddenDelError);
-
-      // Return the offer_record rent to each buyer. vault = None (sellerWallet
-      // omitted): the offer amount already moved to the seller on accept, so only
-      // the rent is refunded. Emits OfferAdminRefunded → sol-refund-webhook
-      // flips rent_returned = true.
       const connection = new Connection(Deno.env.get("SOLANA_RPC_URL")!, {
         commitment: "confirmed",
         fetch,
@@ -166,7 +147,7 @@ Deno.serve(async (req) => {
       const requiredLamports = numBatches * NETWORK_FEE_PER_TX;
       if (backendBalance < requiredLamports) {
         console.error(
-          "backend wallet underfunded — rent refunds will fail",
+          "backend wallet underfunded — settlement will fail",
           backendKeypair.publicKey.toBase58(),
           "balance",
           backendBalance,
@@ -175,22 +156,46 @@ Deno.serve(async (req) => {
         );
       }
 
-      const { signatures, errors } = await sendAdminRefunds(
+      const { signatures, dropped, errors } = await sendAdminSettles(
         connection,
         backendKeypair,
         programId,
         counteroffers_data.map((co) => ({
           ephemeralId: co.ephemeral_id,
           buyerWallet: co.buyer_wallet,
+          sellerWallet,
+          toSeller: true,
+          feeAmount: co.fee_amount,
         })),
       );
 
       if (signatures.length)
-        console.log("rent refunds sent", ephemeralId, signatures);
-      if (errors.length) console.error("rent refund errors", ephemeralId, errors);
+        console.log("settlements sent", ephemeralId, signatures);
+      if (dropped.length)
+        // already consumed on chain: settled by an earlier (re)delivery, or the
+        // buyer canceled before settlement — the matching webhook records it
+        console.warn(
+          "records no longer on chain, skipped",
+          ephemeralId,
+          dropped.map((d) => d.ephemeralId),
+        );
+      if (errors.length) {
+        // leave the witness pending: a webhook redelivery re-runs the driver
+        // and the chain filter makes that convergent
+        console.error("settlement errors", ephemeralId, errors);
+        continue;
+      }
+
+      const { error: witnessUpdateError } = await supabase
+        .from("qr_accepted_counter")
+        .update({ status: "completed" })
+        .eq("id", ephemeralId);
+
+      if (witnessUpdateError)
+        console.error("qr_accepted_counter update error", witnessUpdateError);
 
       console.log(
-        "confirmed accepted_counter",
+        "settlement dispatched for accepted_counter",
         ephemeralId,
         "counter_offers",
         counterOfferIds,
