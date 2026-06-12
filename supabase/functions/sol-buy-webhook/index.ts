@@ -108,6 +108,32 @@ Deno.serve(async (req) => {
       if (qtyError) console.error("quantity increment error", qtyError);
       else console.log("buy recorded", offerId, txSignature);
 
+      // Oversell containment: a buy auth is replayable until its expiry (no
+      // on-chain nonce), so on-chain sales can exceed stock even though the
+      // authorize endpoint checks it. The increment above stays truthful (the
+      // payment really happened) — this makes the oversell loud instead of
+      // silent so it can be refunded.
+      const { data: offerRow } = await supabase
+        .from("qr_offers")
+        .select("unlimited, quantity, quantity_sold")
+        .eq("id", offerId)
+        .maybeSingle();
+      if (offerRow && !offerRow.unlimited && offerRow.quantity_sold > offerRow.quantity) {
+        console.error(
+          "OVERSOLD offer",
+          offerId,
+          "sold",
+          offerRow.quantity_sold,
+          "of",
+          offerRow.quantity,
+          "— buy tx",
+          txSignature,
+          "buyer",
+          buyerWallet,
+          "needs manual refund",
+        );
+      }
+
       // Mark the buyer confirmed (row was inserted with confirmed=false when the
       // buy was initiated on the frontend). Pure wallet-keyed flip — no user_id.
       const { error: buyerError } = await supabase

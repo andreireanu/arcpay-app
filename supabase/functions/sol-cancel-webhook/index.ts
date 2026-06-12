@@ -110,6 +110,31 @@ Deno.serve(async (req) => {
         const sellerWallet = base58Encode(bytes.slice(24, 56));
         console.log("seller_cancel event", offerIdUuid, "seller", sellerWallet);
 
+        // The event's seller field is the tx signer (a Signer account in the
+        // program), so matching it against the listing's owner verifies the
+        // cancel was signed by that owner. Anyone can emit this event with any
+        // offer_id — without this check a spoofed event marks someone else's
+        // listing canceled in the DB.
+        const { data: offerRow, error: offerLookupError } = await supabase
+          .from("qr_offers")
+          .select("seller_wallet")
+          .eq("id", offerIdUuid)
+          .maybeSingle();
+
+        if (offerLookupError || !offerRow) {
+          console.error("qr_offers lookup failed", offerIdUuid, offerLookupError);
+          continue;
+        }
+        if (offerRow.seller_wallet !== sellerWallet) {
+          console.warn(
+            "spoofed seller_cancel ignored",
+            offerIdUuid,
+            "signer",
+            sellerWallet,
+          );
+          continue;
+        }
+
         const { data: counterOffers, error: fetchError } = await supabase
           .from("qr_counteroffers")
           .select("id, ephemeral_id, buyer_wallet")

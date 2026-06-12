@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 
   const { data: offer, error } = await supabase
     .from("qr_offers")
-    .select("price_lamports, fee_bps, seller_wallet, status")
+    .select("price_lamports, fee_bps, seller_wallet, status, unlimited, quantity, quantity_sold")
     .eq("id", offer_id)
     .maybeSingle();
 
@@ -45,6 +45,9 @@ Deno.serve(async (req) => {
   }
   if (!offer.seller_wallet) {
     return new Response("Offer has no seller wallet", { status: 400, headers: corsHeaders });
+  }
+  if (!offer.unlimited && offer.quantity_sold >= offer.quantity) {
+    return new Response("Offer is sold out", { status: 400, headers: corsHeaders });
   }
 
   const keypairBytes = new Uint8Array(JSON.parse(Deno.env.get("BACKEND_KEYPAIR")!));

@@ -21,7 +21,7 @@ import {
   watchNewCounterOffers,
   watchCounterOfferStatuses,
 } from '../supabase/offers/getCounterOffers'
-import { getTransactionsBySeller, watchNewTransactions } from '../supabase/transactions/transactions'
+import { getTransactionsBySeller, watchNewTransactions, watchSettledCounterOffers } from '../supabase/transactions/transactions'
 import { registerSellerIfNew } from '../supabase/sellers/sellers'
 import { getProduct } from '../supabase/products/products'
 import { getCurrentRole } from '../supabase/auth/auth'
@@ -108,6 +108,20 @@ export default function SellerDashboard() {
           if (prev.some((t) => t.id === row.id)) return prev
           const offer_name = offers.find((of) => of.id === row.offer_id)?.name ?? ''
           return [{ ...row, offer_name, source: 'buy' as const }, ...prev]
+        })
+      }),
+    )
+    return () => unsubs.forEach((u) => u())
+  }, [offers])
+
+  useEffect(() => {
+    if (offers.length === 0) return
+    const unsubs = offers.map((o) =>
+      watchSettledCounterOffers(o.id, (row) => {
+        setTransactions((prev) => {
+          if (prev.some((t) => t.id === row.id)) return prev
+          const offer_name = offers.find((of) => of.id === row.offer_id)?.name ?? ''
+          return [{ ...row, offer_name, source: 'counter_offer' as const }, ...prev]
         })
       }),
     )
@@ -333,6 +347,11 @@ export default function SellerDashboard() {
         signAllTransactions: signer.signAllTransactions.bind(signer),
       } as unknown as import('@solana/wallet-adapter-react').AnchorWallet
       await acceptCounter(connection, anchorWallet, [id])
+      // The accept tx is confirmed on chain; settlement (and the realtime
+      // status flip to `confirmed`) follows within seconds via the backend.
+      // Remove the row optimistically so the Accept button doesn't reappear
+      // during that gap — a refresh would resurface it if settlement stalled.
+      setAllCounterOffers((prev) => prev.filter((co) => co.id !== id))
     } catch (err) {
       console.error('Accept failed', err)
     } finally {

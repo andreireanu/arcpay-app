@@ -83,3 +83,26 @@ export function watchNewTransactions(
     .subscribe()
   return () => channel.unsubscribe()
 }
+
+// Watch for counter offers settling on a given offer (status flips to
+// `confirmed` when the settle webhook processes the OfferBought event). These
+// become rows in the seller's transactions list, mirroring watchNewTransactions
+// for buys. RLS scopes delivery to the seller's own offers.
+export function watchSettledCounterOffers(
+  offerId: string,
+  onSettled: (row: TransactionRow) => void,
+): () => void {
+  const channel = supabase
+    .channel(`counter-offer-settled-${offerId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'qr_counteroffers', filter: `offer_id=eq.${offerId}` },
+      (payload) => {
+        const row = payload.new as TransactionRow & { status: string }
+        if (row.status !== 'confirmed') return
+        onSettled(row)
+      },
+    )
+    .subscribe()
+  return () => channel.unsubscribe()
+}

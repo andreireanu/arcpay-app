@@ -69,10 +69,31 @@ export default function Pay() {
 
   useEffect(() => {
     if (!submitted || activeCounterOffer || !offerId || !primaryWallet) return
-    return watchBuyerCounterOfferInsert(offerId, primaryWallet.address, (counterOffer) => {
+    const unsubscribe = watchBuyerCounterOfferInsert(offerId, primaryWallet.address, (counterOffer) => {
       setActiveCounterOffer(counterOffer)
       setSubmitted(false)
     })
+    // Polling fallback: the webhook can insert the row before the realtime
+    // channel finishes joining, and postgres_changes does not replay missed
+    // events — without this the page can wait forever on a row that already
+    // exists. The poll stops as soon as the row is found (effect re-runs).
+    let attempts = 0
+    const poll = setInterval(async () => {
+      if (++attempts > 30) { clearInterval(poll); return }
+      try {
+        const co = await getCounterOfferByBuyer(offerId, primaryWallet.address)
+        if (co) {
+          setActiveCounterOffer(co)
+          setSubmitted(false)
+        }
+      } catch (err) {
+        console.error('counter offer poll failed', err)
+      }
+    }, 2000)
+    return () => {
+      unsubscribe()
+      clearInterval(poll)
+    }
   }, [submitted, activeCounterOffer, offerId, primaryWallet])
 
   async function handleBuy() {
