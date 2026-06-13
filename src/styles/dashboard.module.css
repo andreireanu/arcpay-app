@@ -16,10 +16,56 @@
     flex-shrink: 0;
 }
 
+.headerLeft {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+}
+
 .logo {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+.headerNav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.accountBadge,
+.navButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #1f1f1f;
+    border: none;
+    border-radius: var(--radius-pill);
+    padding: 9px 16px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted);
+    white-space: nowrap;
+}
+
+.navButton,
+.accountBadge {
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.navButton:hover,
+.accountBadge:hover {
+    background: #2a2a2a;
+    color: var(--color-white);
+}
+
+.accountBadgeIcon {
+    display: inline-flex;
+    color: var(--color-yellow);
 }
 
 .logoIcon {
@@ -235,6 +281,71 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
+}
+
+.gridFooter {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+.showMoreBtn {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    padding: 9px 18px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.showMoreBtn:hover {
+    background: var(--color-surface);
+    color: var(--color-white);
+}
+
+/* ── Explorer-style pager (Transactions page) ────────────── */
+.pager {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.pagerInfo {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--color-muted);
+    margin-right: 4px;
+}
+
+.pagerBtn {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    padding: 9px 18px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.pagerBtn:hover:not(:disabled) {
+    background: var(--color-surface);
+    color: var(--color-white);
+}
+
+.pagerBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 .offersList {
@@ -998,6 +1109,18 @@
     gap: 8px;
 }
 
+/* Right-hand controls (status badge + Hide/Accept + checkbox) for a counter
+   offer row. Fixed min-width + right alignment so the data columns to its left
+   line up across rows even when a row is `confirmed` (badge only, no buttons). */
+.coListControls {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 280px;
+}
+
 .hideOfferBtn {
     background: #171717;
     border: 1px solid #f04438;
@@ -1265,6 +1388,22 @@
     color: #b4b4b4;
     white-space: nowrap;
     min-width: 110px;
+}
+
+/* Offer name shown per counter-offer row on the seller dashboard (where counter
+   offers from every listing are pooled). Truncates so long names don't break the
+   row layout. */
+.counterOfferOfferName {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 22px;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+    min-width: 90px;
 }
 
 .counterOfferWallet {

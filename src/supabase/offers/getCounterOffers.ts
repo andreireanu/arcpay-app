@@ -6,11 +6,20 @@ export interface SellerCounterOffers {
   hiddenCount: number
 }
 
-export async function getCounterOffersBySeller(): Promise<SellerCounterOffers> {
+// Scope the query to the seller's OWN offer ids. qr_counteroffers has two SELECT
+// RLS policies — one for sellers (counter offers on their offers) and one for
+// buyers (counter offers they placed) — so a status-only query would also return
+// counter offers this wallet made as a buyer on other sellers' offers. Filtering
+// by the seller's own offer ids keeps the dashboard to counter offers *received*.
+export async function getCounterOffersBySeller(
+  offerIds: string[],
+): Promise<SellerCounterOffers> {
+  if (offerIds.length === 0) return { visible: [], hiddenCount: 0 }
   const [coResult, hiddenResult] = await Promise.all([
     supabase
       .from('qr_counteroffers')
       .select('*')
+      .in('offer_id', offerIds)
       .eq('status', 'active')
       .order('created_at', { ascending: false }),
     // RLS scopes this to the seller's own hidden rows. Presence ⇒ hidden.

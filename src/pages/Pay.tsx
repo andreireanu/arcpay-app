@@ -7,13 +7,27 @@ import { isSolanaWallet } from "@dynamic-labs/solana-core";
 import { getOffer } from "../supabase/offers/offers";
 import { submitCounterOffer } from "../supabase/offers/counterOffers";
 import { cancelCounterOffer } from "../supabase/offers/cancelCounterOffer";
-import { getCounterOfferByBuyer, watchCounterOfferStatuses, watchBuyerCounterOfferInsert } from "../supabase/offers/getCounterOffers";
+import {
+  getCounterOfferByBuyer,
+  watchCounterOfferStatuses,
+  watchBuyerCounterOfferInsert,
+} from "../supabase/offers/getCounterOffers";
 import { registerBuyer } from "../supabase/buyers/buyers";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
 import type { CounterOffer } from "../types/counterOffer";
 import { buy } from "../solana/instructions/buy";
 import type { Offer } from "../types/offer";
+import { config } from "../config/env";
 import s from "../styles/pay.module.css";
+
+const RETURNABLE_FEE_LAMPORTS = config.arcPay.returnableFeeLamports;
+const TX_COST_LAMPORTS = config.arcPay.txCostLamports;
+
+function formatSol(lamports: number): string {
+  return (lamports / 1_000_000_000).toLocaleString("en-US", {
+    maximumFractionDigits: 9,
+  });
+}
 
 export default function Pay() {
   const { offerId } = useParams<{ offerId: string }>();
@@ -61,19 +75,52 @@ export default function Pay() {
   }, [user, primaryWallet, offerId]);
 
   useEffect(() => {
-    if (!activeCounterOffer) return
+    if (!activeCounterOffer) return;
     return watchCounterOfferStatuses([activeCounterOffer.id], (_id, status) => {
-      if (status === 'confirmed' || status === 'buyer_canceled' || status === 'seller_canceled') setActiveCounterOffer(null)
-    })
-  }, [activeCounterOffer])
+      if (
+        status === "confirmed" ||
+        status === "buyer_canceled" ||
+        status === "seller_canceled"
+      )
+        setActiveCounterOffer(null);
+    });
+  }, [activeCounterOffer]);
 
   useEffect(() => {
-    if (!submitted || activeCounterOffer || !offerId || !primaryWallet) return
-    return watchBuyerCounterOfferInsert(offerId, primaryWallet.address, (counterOffer) => {
-      setActiveCounterOffer(counterOffer)
-      setSubmitted(false)
-    })
-  }, [submitted, activeCounterOffer, offerId, primaryWallet])
+    if (!submitted || activeCounterOffer || !offerId || !primaryWallet) return;
+    const unsubscribe = watchBuyerCounterOfferInsert(
+      offerId,
+      primaryWallet.address,
+      (counterOffer) => {
+        setActiveCounterOffer(counterOffer);
+        setSubmitted(false);
+      },
+    );
+    // Polling fallback: the webhook can insert the row before the realtime
+    // channel finishes joining, and postgres_changes does not replay missed
+    // events — without this the page can wait forever on a row that already
+    // exists. The poll stops as soon as the row is found (effect re-runs).
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      if (++attempts > 30) {
+        clearInterval(poll);
+        return;
+      }
+      try {
+        const co = await getCounterOfferByBuyer(offerId, primaryWallet.address);
+        if (co) {
+          setActiveCounterOffer(co);
+          setSubmitted(false);
+        }
+      } catch (err) {
+        console.error("counter offer poll failed", err);
+      }
+    }, 2000);
+    return () => {
+      unsubscribe();
+      clearInterval(poll);
+    };
+  }, [submitted, activeCounterOffer, offerId, primaryWallet]);
 
   async function handleBuy() {
     if (!connected || !primaryWallet || !offerId || buying) return;
@@ -119,7 +166,8 @@ export default function Pay() {
   }
 
   async function handleCancelOffer() {
-    if (!activeCounterOffer || !connected || !primaryWallet || canceling) return;
+    if (!activeCounterOffer || !connected || !primaryWallet || canceling)
+      return;
     setCanceling(true);
     try {
       const signer = await primaryWallet.getSigner();
@@ -128,7 +176,11 @@ export default function Pay() {
         signTransaction: signer.signTransaction.bind(signer),
         signAllTransactions: signer.signAllTransactions.bind(signer),
       } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await cancelCounterOffer(connection, anchorWallet, activeCounterOffer.ephemeral_id);
+      await cancelCounterOffer(
+        connection,
+        anchorWallet,
+        activeCounterOffer.ephemeral_id,
+      );
       setActiveCounterOffer(null);
     } catch (err) {
       console.error("Failed to cancel offer", err);
@@ -166,6 +218,16 @@ export default function Pay() {
   const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
   const isAvailable = offer.status === "active";
 
+  const offeredLamports = Math.max(
+    0,
+    Math.round((parseFloat(counterPrice) || 0) * 1_000_000_000),
+  );
+  const feesAppliedLamports = Math.floor(
+    (offeredLamports * offer.fee_bps) / 10000,
+  );
+  const totalChargedLamports =
+    offeredLamports + RETURNABLE_FEE_LAMPORTS + TX_COST_LAMPORTS;
+
   return (
     <>
       <div className={s.page}>
@@ -184,12 +246,13 @@ export default function Pay() {
 
           {!isAvailable ? (
             <span
-              className={`${s.unavailableBadge} ${offer.status === "paused"
-                ? s.unavailablePaused
-                : offer.status === "sold"
-                  ? s.unavailableSold
-                  : s.unavailableCanceled
-                }`}
+              className={`${s.unavailableBadge} ${
+                offer.status === "paused"
+                  ? s.unavailablePaused
+                  : offer.status === "sold"
+                    ? s.unavailableSold
+                    : s.unavailableCanceled
+              }`}
             >
               {offer.status === "paused"
                 ? "Paused"
@@ -198,7 +261,7 @@ export default function Pay() {
                   : "Cancelled"}
             </span>
           ) : submitted ? (
-            <p className={s.successMessage}>Counter offer submitted!</p>
+            <p className={s.successMessage}>Offer submitted!</p>
           ) : (
             <div className={s.actions}>
               {connected ? (
@@ -224,7 +287,12 @@ export default function Pay() {
                     Your active offer made:
                   </span>
                   <span className={s.activeOfferAmount}>
-                    {((activeCounterOffer.seller_amount + activeCounterOffer.fee_amount) / 1_000_000_000).toFixed(4)} SOL
+                    {(
+                      (activeCounterOffer.seller_amount +
+                        activeCounterOffer.fee_amount) /
+                      1_000_000_000
+                    ).toFixed(4)}{" "}
+                    SOL
                   </span>
                   <div className={s.activeOfferActions}>
                     <button
@@ -275,7 +343,7 @@ export default function Pay() {
               future marketing discount campaign or reviewed manually by the
               merchant. You'll be notified before any payment is taken.
             </p>
-            <button className={s.modalLearnMore} onClick={() => { }}>
+            <button className={s.modalLearnMore} onClick={() => {}}>
               Learn more about offers
             </button>
             <div className={s.modalField}>
@@ -289,6 +357,48 @@ export default function Pay() {
                 value={counterPrice}
                 onChange={(e) => setCounterPrice(e.target.value)}
               />
+            </div>
+            <div className={s.feeBreakdown}>
+              <div className={s.feeRow}>
+                <span className={s.feeLabel}>Fees applied</span>
+                <span className={s.feeValue}>
+                  {formatSol(feesAppliedLamports)} SOL
+                </span>
+              </div>
+              <div className={s.feeRow}>
+                <span className={s.feeLabel}>
+                  Returnable fee
+                  <span className={s.feeTooltipWrap} tabIndex={0}>
+                    <svg
+                      className={s.feeInfoIcon}
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+                      <path
+                        d="M8 7v3.5"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                      />
+                      <circle cx="8" cy="5.25" r="0.75" fill="currentColor" />
+                    </svg>
+                    <span className={s.feeTooltip} role="tooltip">
+                      This fee will be returned when the offer is settled, no
+                      matter the outcome
+                    </span>
+                  </span>
+                </span>
+                <span className={s.returnableValue}>
+                  ± {formatSol(RETURNABLE_FEE_LAMPORTS)} SOL
+                </span>
+              </div>
+              <div className={s.feeRow}>
+                <span className={s.feeLabel}>Total amount charged</span>
+                <span className={s.feeValue}>
+                  ± {formatSol(totalChargedLamports)} SOL
+                </span>
+              </div>
             </div>
             <div className={s.modalActions}>
               <button
@@ -304,7 +414,7 @@ export default function Pay() {
                   parseFloat(counterPrice) <= 0 ||
                   (!!offer &&
                     Math.round(parseFloat(counterPrice) * 1_000_000_000) >=
-                    offer.price_lamports) ||
+                      offer.price_lamports) ||
                   submitting
                 }
                 onClick={handleSubmitCounterOffer}

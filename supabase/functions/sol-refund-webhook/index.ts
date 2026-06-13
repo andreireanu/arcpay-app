@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
           .from("qr_counteroffers")
           .update({
             status: "confirmed",
+            confirmed_at: new Date().toISOString(),
             rent_returned: true,
             settle_tx_signature: txSignature,
           })
