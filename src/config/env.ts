@@ -11,4 +11,9 @@ export const config = {
   dynamic: {
     environmentId: import.meta.env.VITE_DYNAMIC_ENV_ID as string,
   },
-}
+  arcPay: {
+    // Fixed returnable deposit (Offer PDA) shown to buyers on top of their offered price.
+    // 0.00145 SOL.
+    returnableFeeLamports: 1_450_000,
+  },
+};

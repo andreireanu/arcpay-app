@@ -23,6 +23,7 @@ import { acceptCounter } from "../solana/instructions/acceptCounter";
 import { sellerCancelOffer } from "../solana/instructions/sellerCancelOffer";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
+import CounterOffersList from "../components/CounterOffersList";
 import s from "../styles/dashboard.module.css";
 
 function PauseIcon() {
@@ -68,7 +69,6 @@ export default function OfferDetail() {
   const [toggling, setToggling] = useState(false);
   const [counterOffers, setCounterOffers] = useState<CounterOffer[]>([]);
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [accepting, setAccepting] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelCountdown, setCancelCountdown] = useState(10);
@@ -210,7 +210,9 @@ export default function OfferDetail() {
       try {
         await resumeOffer(offer.id);
         setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
-      } catch {}
+      } catch {
+        /* best-effort resume; original cancel error already logged */
+      }
     } finally {
       setCanceling(false);
     }
@@ -254,15 +256,6 @@ export default function OfferDetail() {
     URL.revokeObjectURL(a.href);
   }
 
-  function toggleSelect(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   async function handleAccept(ids: string[]) {
     if (!primaryWallet || !isSolanaWallet(primaryWallet) || ids.length === 0)
       return;
@@ -285,42 +278,14 @@ export default function OfferDetail() {
     }
   }
 
-  function handleAcceptAll() {
-    const activeCounterOffers = counterOffers.filter(
-      (co) => co.status === "active",
-    );
-    handleAccept(activeCounterOffers.map((co) => co.id));
-  }
-
-  function handleAcceptSelected() {
-    handleAccept([...selectedIds]);
-  }
-
-  async function handleHide(id: string) {
-    try {
-      await hideCounterOffers([id]);
-      setCounterOffers((prev) => prev.filter((co) => co.id !== id));
-      setHiddenIds((prev) => [...prev, id]);
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    } catch (err) {
-      console.error("Failed to hide counter offer", err);
-    }
-  }
-
-  async function handleHideSelected() {
-    const ids = [...selectedIds];
+  async function handleHide(ids: string[]) {
     if (ids.length === 0) return;
     try {
       await hideCounterOffers(ids);
-      setCounterOffers((prev) => prev.filter((co) => !selectedIds.has(co.id)));
+      setCounterOffers((prev) => prev.filter((co) => !ids.includes(co.id)));
       setHiddenIds((prev) => [...prev, ...ids]);
-      setSelectedIds(new Set());
     } catch (err) {
-      console.error("Failed to hide selected counter offers", err);
+      console.error("Failed to hide counter offers", err);
     }
   }
 
@@ -334,20 +299,6 @@ export default function OfferDetail() {
     } catch (err) {
       console.error("Failed to show hidden counter offers", err);
     }
-  }
-
-  function formatDate(iso: string) {
-    const d = new Date(iso);
-    return `${d.getDate().toString().padStart(2, "0")}.${(d.getMonth() + 1).toString().padStart(2, "0")}.${d.getFullYear()}`;
-  }
-
-  function shortWallet(address: string) {
-    return `${address.slice(0, 4)}...${address.slice(-4)}`;
-  }
-
-  function isExpiringSoon(expiryIso: string) {
-    const sevenDays = 7 * 24 * 60 * 60 * 1000;
-    return new Date(expiryIso).getTime() - Date.now() < sevenDays;
   }
 
   function statusClass(status: Offer["status"]) {
@@ -483,149 +434,12 @@ export default function OfferDetail() {
                   </button>
                 )}
               </div>
-              {(() => {
-                const hasSelection = selectedIds.size > 0;
-                const activeOffers = counterOffers.filter(
-                  (co) => co.status === "active",
-                );
-                const displayed = hasSelection
-                  ? counterOffers.filter((co) => selectedIds.has(co.id))
-                  : activeOffers;
-                const totalAmount = displayed.reduce(
-                  (sum, co) => sum + co.seller_amount + co.fee_amount,
-                  0,
-                );
-                const totalQty = displayed.reduce(
-                  (sum, co) => sum + co.quantity,
-                  0,
-                );
-                const avgPrice = totalQty > 0 ? totalAmount / totalQty : 0;
-                return (
-                  <div className={s.selectionSummary}>
-                    <div className={s.selectionSummaryStats}>
-                      <div className={s.selectionSummaryItem}>
-                        <span className={s.selectionSummaryLabel}>
-                          {hasSelection
-                            ? "Total selected offers"
-                            : "Total active offers"}
-                        </span>
-                        <span className={s.selectionSummaryValue}>
-                          {displayed.length}
-                        </span>
-                      </div>
-                      <div className={s.selectionSummaryItem}>
-                        <span className={s.selectionSummaryLabel}>
-                          Avg. Price
-                        </span>
-                        <span className={s.selectionSummaryValue}>
-                          {(avgPrice / 1_000_000_000).toFixed(4)} SOL
-                        </span>
-                      </div>
-                      <div className={s.selectionSummaryItem}>
-                        <span className={s.selectionSummaryLabel}>
-                          Total received
-                        </span>
-                        <span
-                          className={`${s.selectionSummaryValue} ${s.selectionSummaryTotal}`}
-                        >
-                          {(totalAmount / 1_000_000_000).toFixed(4)} SOL
-                        </span>
-                      </div>
-                    </div>
-                    <div className={s.selectionSummaryActions}>
-                      <button
-                        className={s.summaryHideButton}
-                        disabled={selectedIds.size === 0}
-                        onClick={handleHideSelected}
-                      >
-                        Hide selected
-                      </button>
-                      <button
-                        className={s.summaryAcceptButton}
-                        disabled={accepting || displayed.length === 0}
-                        onClick={
-                          hasSelection ? handleAcceptSelected : handleAcceptAll
-                        }
-                      >
-                        {accepting
-                          ? "Accepting…"
-                          : hasSelection
-                            ? "Accept selected"
-                            : "Accept all"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-              {[...counterOffers]
-                .sort((a, b) => {
-                  if (a.status === "confirmed" && b.status !== "confirmed")
-                    return 1;
-                  if (a.status !== "confirmed" && b.status === "confirmed")
-                    return -1;
-                  return (b.seller_amount + b.fee_amount) - (a.seller_amount + a.fee_amount);
-                })
-                .map((co) => (
-                  <div
-                    key={co.id}
-                    className={`${s.counterOfferRow} ${co.status === "confirmed" ? s.counterOfferRowConfirmed : ""}`}
-                  >
-                    <div className={s.counterOfferMeta}>
-                      <span className={s.counterOfferDate}>
-                        {formatDate(co.created_at)}
-                      </span>
-                      <span className={s.counterOfferWallet}>
-                        From wallet: {shortWallet(co.buyer_wallet)}
-                      </span>
-                      <span className={s.counterOfferAmount}>
-                        {((co.seller_amount + co.fee_amount) / 1_000_000_000).toFixed(4)} SOL
-                      </span>
-                      <span className={s.counterOfferExpiry}>
-                        Expire on {formatDate(co.expiry_at)}
-                      </span>
-                    </div>
-                    <div className={s.counterOfferActions}>
-                      {co.status === "confirmed" ? (
-                        <span className={s.counterOfferStatusConfirmed}>
-                          confirmed
-                        </span>
-                      ) : (
-                        <>
-                          <span
-                            className={
-                              isExpiringSoon(co.expiry_at)
-                                ? s.counterOfferStatusExpiring
-                                : s.counterOfferStatusActive
-                            }
-                          >
-                            {isExpiringSoon(co.expiry_at)
-                              ? "expiring soon"
-                              : "active"}
-                          </span>
-                          <button
-                            className={s.declineButton}
-                            onClick={() => handleHide(co.id)}
-                          >
-                            Hide
-                          </button>
-                          <button
-                            className={s.acceptButton}
-                            disabled={accepting}
-                            onClick={() => handleAccept([co.id])}
-                          >
-                            Accept
-                          </button>
-                          <input
-                            type="checkbox"
-                            className={s.counterOfferCheckbox}
-                            checked={selectedIds.has(co.id)}
-                            onChange={() => toggleSelect(co.id)}
-                          />
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <CounterOffersList
+                counterOffers={counterOffers}
+                accepting={accepting}
+                onAccept={handleAccept}
+                onHide={handleHide}
+              />
             </section>
           )}
         </div>

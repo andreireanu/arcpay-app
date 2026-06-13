@@ -1,66 +1,35 @@
 import { supabase } from '../client'
 import type { Transaction } from '../../types/transaction'
 
-type OfferName = { name: string } | null
-
-type BuyRow = Omit<Transaction, 'offer_name' | 'source'> & { qr_offers: OfferName }
-
-type CounterOfferRow = {
-  id: string
-  offer_id: string
-  buyer_wallet: string
-  tx_signature: string
-  seller_amount: number
-  fee_amount: number
-  quantity: number
-  created_at: string
-  qr_offers: OfferName
+export interface TransactionPage {
+  transactions: Transaction[]
+  total: number
 }
 
-export async function getTransactionsBySeller(): Promise<Transaction[]> {
-  const [buysResult, counterOffersResult] = await Promise.all([
-    supabase
-      .from('qr_transactions')
-      .select('*, qr_offers(name)')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('qr_counteroffers')
-      .select('*, qr_offers(name)')
-      .eq('status', 'confirmed')
-      .order('created_at', { ascending: false }),
-  ])
+// Server-side paginated transaction history. Reads the qr_seller_transactions
+// view (a UNION of direct buys + confirmed counter offers, already normalized
+// to the Transaction shape and seller-scoped via the underlying tables' RLS),
+// so each call fetches only its page. `count: 'exact'` returns the full row
+// count for computing page boundaries without loading every row.
+export async function getTransactionsBySeller(
+  page = 0,
+  pageSize = 10,
+): Promise<TransactionPage> {
+  const from = page * pageSize
+  const to = from + pageSize - 1
 
-  if (buysResult.error) throw buysResult.error
-  if (counterOffersResult.error) throw counterOffersResult.error
+  const { data, error, count } = await supabase
+    .from('qr_seller_transactions')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(from, to)
 
-  const buys: Transaction[] = (buysResult.data as unknown as BuyRow[]).map((row) => {
-    const { qr_offers, ...rest } = row
-    return {
-      ...rest,
-      offer_name: qr_offers?.name ?? '',
-      source: 'buy' as const,
-    }
-  })
+  if (error) throw error
 
-  const counterOffers: Transaction[] = (counterOffersResult.data as unknown as CounterOfferRow[]).map((row) => {
-    const { qr_offers, buyer_wallet, offer_id, tx_signature, seller_amount, fee_amount, quantity, created_at, id } = row
-    return {
-      id,
-      offer_id,
-      offer_name: qr_offers?.name ?? '',
-      buyer_wallet,
-      tx_signature,
-      seller_amount,
-      fee_amount,
-      quantity,
-      created_at,
-      source: 'counter_offer' as const,
-    }
-  })
-
-  return [...buys, ...counterOffers].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  )
+  return {
+    transactions: (data ?? []) as unknown as Transaction[],
+    total: count ?? 0,
+  }
 }
 
 // Raw qr_transactions row as delivered by Realtime (no qr_offers join, no source

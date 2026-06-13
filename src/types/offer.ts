@@ -4,6 +4,7 @@ export interface Offer {
   name: string;
   description: string | null;
   price_lamports: number;
+  fee_bps: number;
   status: "unlisted" | "active" | "paused" | "canceled" | "sold";
   quantity: number;
   quantity_sold: number;
