@@ -67,9 +67,15 @@ export function watchSettledCounterOffers(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'qr_counteroffers', filter: `offer_id=eq.${offerId}` },
       (payload) => {
-        const row = payload.new as TransactionRow & { status: string }
+        const row = payload.new as TransactionRow & {
+          status: string
+          confirmed_at: string | null
+        }
         if (row.status !== 'confirmed') return
-        onSettled(row)
+        // For a counter offer the execution time is confirmed_at (when this
+        // settle flipped it), not created_at (when the buyer placed it). Mirror
+        // the qr_seller_transactions view so live rows match a reload.
+        onSettled({ ...row, created_at: row.confirmed_at ?? row.created_at })
       },
     )
     .subscribe()
