@@ -20,11 +20,13 @@ export default function Products() {
     getOffersByWallet(walletAddress).then(setOffers).catch(console.error)
   }, [walletAddress])
 
+  const ownOfferIdKey = offers.map((o) => o.id).join(',')
   useEffect(() => {
-    getCounterOffersBySeller()
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    getCounterOffersBySeller(ids)
       .then(({ visible }) => setCounterOffers(visible))
       .catch(console.error)
-  }, [])
+  }, [ownOfferIdKey])
 
   useEffect(() => {
     if (offers.length === 0) return

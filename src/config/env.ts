@@ -12,8 +12,12 @@ export const config = {
     environmentId: import.meta.env.VITE_DYNAMIC_ENV_ID as string,
   },
   arcPay: {
-    // Fixed returnable deposit (Offer PDA) shown to buyers on top of their offered price.
-    // 0.00145 SOL.
-    returnableFeeLamports: 1_450_000,
+    // Returnable deposit (Offer PDA rent) shown to buyers on top of their offered
+    // price; refunded on settlement. Defaults to 0.00145 SOL if the env var is unset.
+    returnableFeeLamports: Number(
+      import.meta.env.VITE_RETURNABLE_FEE_LAMPORTS ?? 1_450_000,
+    ),
+    // Solana network transaction cost added to the total the buyer is charged.
+    txCostLamports: Number(import.meta.env.VITE_TX_COST_LAMPORTS ?? 5_000),
   },
 };

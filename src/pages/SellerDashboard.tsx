@@ -45,14 +45,18 @@ export default function SellerDashboard() {
     getOffersByWallet(walletAddress).then(setOffers).catch(console.error)
   }, [walletAddress])
 
+  // Load counter offers received on the seller's OWN offers (not ones this
+  // wallet placed as a buyer). Re-runs once the seller's offers have loaded.
+  const ownOfferIdKey = offers.map((o) => o.id).join(',')
   useEffect(() => {
-    getCounterOffersBySeller()
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    getCounterOffersBySeller(ids)
       .then(({ visible, hiddenCount }) => {
         setAllCounterOffers(visible)
         setHiddenCount(hiddenCount)
       })
       .catch(console.error)
-  }, [])
+  }, [ownOfferIdKey])
 
   useEffect(() => {
     if (offers.length === 0) return
@@ -139,7 +143,9 @@ export default function SellerDashboard() {
   async function handleUnhideAll() {
     try {
       await unhideAllCounterOffers()
-      const { visible, hiddenCount } = await getCounterOffersBySeller()
+      const { visible, hiddenCount } = await getCounterOffersBySeller(
+        offers.map((o) => o.id),
+      )
       setAllCounterOffers(visible)
       setHiddenCount(hiddenCount)
     } catch (err) {

@@ -21,6 +21,7 @@ import { config } from "../config/env";
 import s from "../styles/pay.module.css";
 
 const RETURNABLE_FEE_LAMPORTS = config.arcPay.returnableFeeLamports;
+const TX_COST_LAMPORTS = config.arcPay.txCostLamports;
 
 function formatSol(lamports: number): string {
   return (lamports / 1_000_000_000).toLocaleString("en-US", {
@@ -224,7 +225,8 @@ export default function Pay() {
   const feesAppliedLamports = Math.floor(
     (offeredLamports * offer.fee_bps) / 10000,
   );
-  const totalChargedLamports = offeredLamports + RETURNABLE_FEE_LAMPORTS;
+  const totalChargedLamports =
+    offeredLamports + RETURNABLE_FEE_LAMPORTS + TX_COST_LAMPORTS;
 
   return (
     <>
