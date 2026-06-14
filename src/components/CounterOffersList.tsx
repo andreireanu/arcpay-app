@@ -90,7 +90,7 @@ export default function CounterOffersList({
     <>
       <div className={s.selectionSummary}>
         <div className={s.selectionSummaryStats}>
-          <div className={s.selectionSummaryItem}>
+          <div className={`${s.selectionSummaryItem} ${s.selectionSummaryItemFirst}`}>
             <span className={s.selectionSummaryLabel}>
               {hasSelection ? 'Total selected offers' : 'Total active offers'}
             </span>
@@ -103,7 +103,7 @@ export default function CounterOffersList({
             </span>
           </div>
           <div className={s.selectionSummaryItem}>
-            <span className={s.selectionSummaryLabel}>Total received</span>
+            <span className={s.selectionSummaryLabel}>Total to receive</span>
             <span className={`${s.selectionSummaryValue} ${s.selectionSummaryTotal}`}>
               {(totalAmount / 1_000_000_000).toFixed(4)} SOL
             </span>
