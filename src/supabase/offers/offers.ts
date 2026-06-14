@@ -29,6 +29,20 @@ export async function getOffer(offerId: string): Promise<Offer | null> {
   return data as Offer | null
 }
 
+// Fetch a set of offers by id (qr_offers is publicly readable). Used by the
+// buyer dashboard to resolve the offers behind a buyer's purchases / counter
+// offers into full cards with stock + status.
+export async function getOffersByIds(ids: string[]): Promise<Offer[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await supabase
+    .from('qr_offers')
+    .select('*')
+    .in('id', ids)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data as Offer[]
+}
+
 export async function getOffersByWallet(sellerWallet: string): Promise<Offer[]> {
   const { data, error } = await supabase
     .from('qr_offers')

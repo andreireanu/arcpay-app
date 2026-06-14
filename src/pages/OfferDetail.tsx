@@ -24,6 +24,8 @@ import { sellerCancelOffer } from "../solana/instructions/sellerCancelOffer";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
 import CounterOffersList from "../components/CounterOffersList";
+import SolIcon from "../assets/icons/SolIcon";
+import DownloadIcon from "../assets/icons/DownloadIcon";
 import s from "../styles/dashboard.module.css";
 
 function PauseIcon() {
@@ -55,6 +57,24 @@ function CloseIcon() {
       strokeLinecap="round"
     >
       <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }
@@ -362,66 +382,79 @@ export default function OfferDetail() {
 
       <main className={s.content}>
         <div className={s.offersSection}>
-          <div className={s.offerCardTop}>
-            <div className={s.offerInfo}>
-              <div className={s.offerMeta}>
-                <h1 className={s.offerName}>{offer.name}</h1>
-                {offer.description && (
-                  <p className={s.offerDescription}>{offer.description}</p>
+          <div className={s.offerDetailMain}>
+            <div className={s.offerDetailThumb}>
+              <img src="/favicon.svg" alt="" />
+            </div>
+            <div className={s.offerDetailContent}>
+              <div className={s.offerDetailNameRow}>
+                <h1 className={s.offerDetailName}>{offer.name}</h1>
+                <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
+                  {offer.status}
+                </span>
+              </div>
+              {offer.description && (
+                <p className={s.offerDetailDescription}>{offer.description}</p>
+              )}
+              <div className={s.offerDetailPrice}>
+                <SolIcon size={30} />
+                <span>{priceSOL} SOL</span>
+              </div>
+
+              <div className={s.offerDetailActions}>
+                <span className={s.offerDetailQuantity}>
+                  {offer.unlimited
+                    ? 'Unlimited'
+                    : `${offer.quantity - offer.quantity_sold} of ${offer.quantity} remaining`}
+                </span>
+                <a
+                  href={`/pay/${offer.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={s.offerDetailBtn}
+                >
+                  <EyeIcon />
+                  View Page
+                </a>
+                <button className={s.offerDetailBtn} onClick={handleDownloadQr}>
+                  <DownloadIcon size={14} />
+                  Download QR
+                </button>
+                {canAct && (
+                  <button
+                    className={s.offerDetailBtn}
+                    disabled={toggling}
+                    onClick={() =>
+                      offer.status === "active" ? handlePause() : handleResume()
+                    }
+                  >
+                    {offer.status === "active" ? <PauseIcon /> : <PlayIcon />}
+                    {toggling
+                      ? offer.status === "active"
+                        ? "Pausing…"
+                        : "Resuming…"
+                      : offer.status === "active"
+                        ? "Pause"
+                        : "Resume"}
+                  </button>
+                )}
+                {canAct && (
+                  <button
+                    className={s.offerDetailBtn}
+                    onClick={handleCancelClick}
+                    disabled={toggling}
+                  >
+                    <CloseIcon />
+                    Cancel
+                  </button>
                 )}
               </div>
-              <p className={s.offerPrice}>{priceSOL} SOL</p>
-              <p className={s.offerQuantity}>
-                {offer.unlimited ? 'Unlimited' : `${offer.quantity - offer.quantity_sold} of ${offer.quantity} remaining`}
-              </p>
-            </div>
-            <div className={s.offerCardRight}>
-              <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
-                {offer.status}
-              </span>
             </div>
           </div>
+        </div>
 
-          {canAct && (
-            <div className={s.offerTopActions}>
-              <button
-                className={s.pauseButton}
-                disabled={toggling}
-                onClick={() =>
-                  offer.status === "active" ? handlePause() : handleResume()
-                }
-              >
-                {offer.status === "active" ? <PauseIcon /> : <PlayIcon />}
-                {toggling
-                  ? offer.status === "active"
-                    ? "Pausing…"
-                    : "Resuming…"
-                  : offer.status === "active"
-                    ? "Pause offer"
-                    : "Resume offer"}
-              </button>
-              <button className={s.cancelButton} onClick={handleCancelClick} disabled={toggling}>
-                <CloseIcon />
-                Cancel offer
-              </button>
-            </div>
-          )}
-
-          <div className={s.offerBottomActions}>
-            <a
-              href={`/pay/${offer.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={s.viewPageButton}
-            >
-              View page
-            </a>
-            <button className={s.downloadQrButton} onClick={handleDownloadQr}>
-              Download QR
-            </button>
-          </div>
-
-          {(counterOffers.length > 0 || hiddenIds.length > 0) && (
+        {(counterOffers.length > 0 || hiddenIds.length > 0) && (
+          <div className={s.offersSection}>
             <section className={s.counterOffersSection}>
               <div className={s.counterOffersHeader}>
                 <h2 className={s.counterOffersTitle}>Counter offers</h2>
@@ -441,8 +474,8 @@ export default function OfferDetail() {
                 onHide={handleHide}
               />
             </section>
-          )}
-        </div>
+          </div>
+        )}
       </main>
     </div>
 

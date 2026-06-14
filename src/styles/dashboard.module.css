@@ -406,6 +406,78 @@
     border-color: rgba(255, 255, 255, 0.18);
 }
 
+/* Selected (focused) bought item — highlighted ring + faint tint. */
+.offerCardSelected {
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 1px #a78bfa, 0 0 0 4px rgba(167, 139, 250, 0.15);
+    background: #140e22;
+}
+
+.offerCardSelected:hover {
+    border-color: #a78bfa;
+}
+
+.offerCardSelectedBadge {
+    border-radius: var(--radius-pill);
+    padding: 5px 10px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
+    text-align: center;
+    background: #1a0e28;
+    color: #a78bfa;
+}
+
+/* Filter chip in the tabs header — shows which item the lists are filtered to. */
+.filterChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #1a0e28;
+    border: 1px solid #a78bfa55;
+    border-radius: var(--radius-pill);
+    padding: 5px 6px 5px 14px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 18px;
+}
+
+.filterChipLabel {
+    color: #a78bfa;
+    font-weight: 500;
+}
+
+.filterChipName {
+    color: var(--color-white);
+    font-weight: 600;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.filterChipClear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(167, 139, 250, 0.18);
+    color: #c4b5fd;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    transition: background 0.15s;
+}
+
+.filterChipClear:hover {
+    background: rgba(167, 139, 250, 0.32);
+}
+
 .offerCardThumb {
     width: 82px;
     height: 82px;
@@ -463,7 +535,7 @@
     color: var(--color-white);
     white-space: nowrap;
     flex-shrink: 0;
-    margin-right: 4px;
+    margin-right: auto;
 }
 
 .offerCardPill {
@@ -548,24 +620,125 @@
 }
 
 /* kept for reference — no longer used in the card */
-.offerCardTop {
+/* ── Offer detail header ─────────────────────────────────── */
+.offerDetailMain {
     display: flex;
     align-items: flex-start;
+    gap: 24px;
+}
+
+.offerDetailNameRow {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
 }
 
-.offerInfo {
+.offerDetailThumb {
+    width: 168px;
+    height: 168px;
+    flex-shrink: 0;
+    background: #1a1a1a;
+    border-radius: 16px;
     display: flex;
-    flex-direction: column;
-    gap: 12px;
-    flex: 1;
+    align-items: center;
+    justify-content: center;
 }
 
-.offerMeta {
+.offerDetailThumb img {
+    width: 72px;
+    height: 72px;
+    opacity: 0.45;
+}
+
+.offerDetailContent {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 14px;
+}
+
+.offerDetailName {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 28px;
+    line-height: 34px;
+    letter-spacing: -0.6px;
+    color: var(--color-white);
+}
+
+.offerDetailDescription {
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted);
+    max-width: 760px;
+}
+
+.offerDetailPrice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 28px;
+    line-height: 34px;
+    letter-spacing: -0.6px;
+    color: var(--color-white);
+}
+
+.offerDetailActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.offerDetailQuantity {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    padding: 10px 20px;
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+}
+
+.offerDetailBtn {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    padding: 10px 20px;
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.offerDetailBtn:hover {
+    opacity: 0.75;
+}
+
+.offerDetailBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .offerName {
@@ -585,27 +758,11 @@
     color: var(--color-muted);
 }
 
-.offerPrice {
-    font-family: var(--font-body);
-    font-weight: 700;
-    font-size: 20px;
-    line-height: 28px;
-    letter-spacing: -0.4px;
-    color: var(--color-white);
-}
-
 .offerQuantity {
     font-family: var(--font-body);
     font-size: 12px;
     line-height: 16px;
     color: var(--color-muted);
-}
-
-.offerCardRight {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 12px;
 }
 
 /* ── Status badges ───────────────────────────────────────── */
@@ -638,111 +795,6 @@
 .statusSold {
     background: #0a1628;
     color: #3b82f6;
-}
-
-/* ── Offer card action rows ──────────────────────────────── */
-.offerTopActions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-}
-
-.pauseButton {
-    flex: 1;
-    background: var(--color-surface);
-    border: 1px solid var(--color-muted);
-    border-radius: var(--radius-pill);
-    padding: 7px 10px;
-    font-family: var(--font-body);
-    font-weight: 400;
-    font-size: 13px;
-    line-height: 18px;
-    color: var(--color-white);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    transition: opacity 0.15s;
-    white-space: nowrap;
-}
-
-.pauseButton:hover {
-    opacity: 0.8;
-}
-
-.pauseButton:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.cancelButton {
-    flex: 1;
-    background: var(--color-surface);
-    border: 1px solid #f04438;
-    border-radius: var(--radius-pill);
-    padding: 7px 10px;
-    font-family: var(--font-body);
-    font-weight: 400;
-    font-size: 13px;
-    line-height: 18px;
-    color: #f04438;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    transition: opacity 0.15s;
-    white-space: nowrap;
-}
-
-.cancelButton:hover {
-    opacity: 0.8;
-}
-
-.offerBottomActions {
-    display: flex;
-    gap: 8px;
-}
-
-.viewPageButton {
-    flex: 1;
-    background: var(--color-black);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-pill);
-    padding: 9px 16px;
-    font-family: var(--font-body);
-    font-weight: 600;
-    font-size: 13px;
-    line-height: 18px;
-    color: var(--color-muted);
-    text-align: center;
-    text-decoration: none;
-    display: block;
-    transition: opacity 0.15s;
-}
-
-.viewPageButton:hover {
-    opacity: 0.8;
-}
-
-.downloadQrButton {
-    flex: 1;
-    background: var(--color-black);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-pill);
-    padding: 9px 16px;
-    font-family: var(--font-body);
-    font-weight: 600;
-    font-size: 13px;
-    line-height: 18px;
-    color: var(--color-muted);
-    cursor: pointer;
-    transition: opacity 0.15s;
-}
-
-.downloadQrButton:hover {
-    opacity: 0.8;
 }
 
 /* ── AddOffer modal ──────────────────────────────────────── */
@@ -987,10 +1039,19 @@
     font-weight: 700;
 }
 
+/* Keeps the badge's footprint (and the flex gap) so the tab label stays put. */
+.tabBadgeHidden {
+    visibility: hidden;
+}
+
 .coList {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    /* Dense tabular rows: rather than let columns collapse and overlap on a
+       narrow viewport, keep each row at its natural width and scroll the list
+       horizontally. */
+    overflow-x: auto;
 }
 
 .coListRow {
@@ -1001,12 +1062,16 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    min-width: 0;
+    /* Never shrink below the content's natural size — prevents column overlap
+       (the list scrolls horizontally instead). */
+    min-width: max-content;
 }
 
 .coListName {
-    flex: 4;
-    min-width: 0;
+    /* Only the name column flexes — it absorbs extra width so the fixed columns
+       to its right line up identically on every row regardless of name length. */
+    flex: 1 1 auto;
+    min-width: 170px;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1030,8 +1095,9 @@
 }
 
 .coListCol {
-    flex: 3;
-    min-width: 0;
+    /* Fixed width so every row's columns align (no flex distribution that would
+       vary with content length). */
+    flex: 0 0 132px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -1053,8 +1119,7 @@
 }
 
 .coListValueBold {
-    flex: 2;
-    min-width: 0;
+    flex: 0 0 104px;
     text-align: right;
     font-family: var(--font-body);
     font-weight: 700;
@@ -1281,6 +1346,12 @@
     flex-direction: column;
     align-items: center;
     gap: 2px;
+}
+
+.selectionSummaryItemFirst {
+    /* Keep the content centered within the column, but nudge it left of the
+       column's true center so it doesn't read as floating in empty space. */
+    padding-right: 64px;
 }
 
 .selectionSummarySep {
