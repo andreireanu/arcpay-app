@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import SellerDashboard from "./pages/SellerDashboard";
+import BuyerDashboard from "./pages/BuyerDashboard";
 import Products from "./pages/Products";
 import Transactions from "./pages/Transactions";
 import OfferDetail from "./pages/OfferDetail";
@@ -17,6 +18,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <SellerDashboard />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/buyer",
+    element: (
+      <ProtectedRoute>
+        <BuyerDashboard />
       </ProtectedRoute>
     ),
   },

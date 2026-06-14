@@ -406,6 +406,78 @@
     border-color: rgba(255, 255, 255, 0.18);
 }
 
+/* Selected (focused) bought item — highlighted ring + faint tint. */
+.offerCardSelected {
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 1px #a78bfa, 0 0 0 4px rgba(167, 139, 250, 0.15);
+    background: #140e22;
+}
+
+.offerCardSelected:hover {
+    border-color: #a78bfa;
+}
+
+.offerCardSelectedBadge {
+    border-radius: var(--radius-pill);
+    padding: 5px 10px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
+    text-align: center;
+    background: #1a0e28;
+    color: #a78bfa;
+}
+
+/* Filter chip in the tabs header — shows which item the lists are filtered to. */
+.filterChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #1a0e28;
+    border: 1px solid #a78bfa55;
+    border-radius: var(--radius-pill);
+    padding: 5px 6px 5px 14px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 18px;
+}
+
+.filterChipLabel {
+    color: #a78bfa;
+    font-weight: 500;
+}
+
+.filterChipName {
+    color: var(--color-white);
+    font-weight: 600;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.filterChipClear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(167, 139, 250, 0.18);
+    color: #c4b5fd;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    transition: background 0.15s;
+}
+
+.filterChipClear:hover {
+    background: rgba(167, 139, 250, 0.32);
+}
+
 .offerCardThumb {
     width: 82px;
     height: 82px;
@@ -967,10 +1039,19 @@
     font-weight: 700;
 }
 
+/* Keeps the badge's footprint (and the flex gap) so the tab label stays put. */
+.tabBadgeHidden {
+    visibility: hidden;
+}
+
 .coList {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    /* Dense tabular rows: rather than let columns collapse and overlap on a
+       narrow viewport, keep each row at its natural width and scroll the list
+       horizontally. */
+    overflow-x: auto;
 }
 
 .coListRow {
@@ -981,12 +1062,16 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    min-width: 0;
+    /* Never shrink below the content's natural size — prevents column overlap
+       (the list scrolls horizontally instead). */
+    min-width: max-content;
 }
 
 .coListName {
-    flex: 4;
-    min-width: 0;
+    /* Only the name column flexes — it absorbs extra width so the fixed columns
+       to its right line up identically on every row regardless of name length. */
+    flex: 1 1 auto;
+    min-width: 170px;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1010,8 +1095,9 @@
 }
 
 .coListCol {
-    flex: 3;
-    min-width: 0;
+    /* Fixed width so every row's columns align (no flex distribution that would
+       vary with content length). */
+    flex: 0 0 132px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -1033,8 +1119,7 @@
 }
 
 .coListValueBold {
-    flex: 2;
-    min-width: 0;
+    flex: 0 0 104px;
     text-align: right;
     font-family: var(--font-body);
     font-weight: 700;

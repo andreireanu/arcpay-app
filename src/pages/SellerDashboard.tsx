@@ -123,11 +123,11 @@ export default function SellerDashboard() {
   }, [offers])
 
   useEffect(() => {
-    if (activeTab !== 'transactions' || txLoaded) return
-    getTransactionsBySeller(0, 5)
+    if (activeTab !== 'transactions' || txLoaded || !walletAddress) return
+    getTransactionsBySeller(walletAddress, 0, 5)
       .then(({ transactions, total }) => { setTransactions(transactions); setTxTotal(total); setTxLoaded(true) })
       .catch(console.error)
-  }, [activeTab, txLoaded])
+  }, [activeTab, txLoaded, walletAddress])
 
   async function handleHide(ids: string[]) {
     if (ids.length === 0) return

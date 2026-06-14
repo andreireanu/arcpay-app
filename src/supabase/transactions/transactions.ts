@@ -6,12 +6,14 @@ export interface TransactionPage {
   total: number
 }
 
-// Server-side paginated transaction history. Reads the qr_seller_transactions
-// view (a UNION of direct buys + confirmed counter offers, already normalized
-// to the Transaction shape and seller-scoped via the underlying tables' RLS),
-// so each call fetches only its page. `count: 'exact'` returns the full row
-// count for computing page boundaries without loading every row.
+// Server-side paginated transaction history for a seller. Reads the
+// qr_seller_transactions view (a UNION of direct buys + confirmed counter
+// offers, normalized to the Transaction shape) scoped explicitly to
+// seller_wallet — NOT by RLS, since a wallet that also buys would otherwise
+// match its own purchases through the buyer SELECT policies. `count: 'exact'`
+// returns the full row count for computing page boundaries.
 export async function getTransactionsBySeller(
+  sellerWallet: string,
   page = 0,
   pageSize = 10,
 ): Promise<TransactionPage> {
@@ -21,6 +23,41 @@ export async function getTransactionsBySeller(
   const { data, error, count } = await supabase
     .from('qr_seller_transactions')
     .select('*', { count: 'exact' })
+    .eq('seller_wallet', sellerWallet)
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (error) throw error
+
+  return {
+    transactions: (data ?? []) as unknown as Transaction[],
+    total: count ?? 0,
+  }
+}
+
+// Buyer-side transaction history. Reads the SAME qr_seller_transactions view
+// (buys + confirmed counter offers) but scoped explicitly to buyer_wallet — NOT
+// by RLS. A wallet that is both a seller and a buyer satisfies both the seller
+// and buyer SELECT policies, so the view would otherwise also return the rows
+// this wallet *received* as a seller. Filtering by buyer_wallet keeps it to the
+// wallet's own purchases. (Requires the "buyers can read own transactions"
+// policy on qr_transactions.)
+export async function getTransactionsByBuyer(
+  buyerWallet: string,
+  page = 0,
+  pageSize = 10,
+  offerId?: string,
+): Promise<TransactionPage> {
+  const from = page * pageSize
+  const to = from + pageSize - 1
+
+  let query = supabase
+    .from('qr_seller_transactions')
+    .select('*', { count: 'exact' })
+    .eq('buyer_wallet', buyerWallet)
+  if (offerId) query = query.eq('offer_id', offerId)
+
+  const { data, error, count } = await query
     .order('created_at', { ascending: false })
     .range(from, to)
 
@@ -47,6 +84,24 @@ export function watchNewTransactions(
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'qr_transactions', filter: `offer_id=eq.${offerId}` },
+      (payload) => onInsert(payload.new as TransactionRow),
+    )
+    .subscribe()
+  return () => channel.unsubscribe()
+}
+
+// Watch for new buys made BY this wallet (buyer dashboard). qr_transactions is
+// in the realtime publication; the buyer SELECT RLS scopes delivery to rows
+// where buyer_wallet matches, and the filter keeps it tight.
+export function watchBuyerTransactions(
+  buyerWallet: string,
+  onInsert: (row: TransactionRow) => void,
+): () => void {
+  const channel = supabase
+    .channel(`buyer-transaction-new-${buyerWallet}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'qr_transactions', filter: `buyer_wallet=eq.${buyerWallet}` },
       (payload) => onInsert(payload.new as TransactionRow),
     )
     .subscribe()

@@ -38,6 +38,7 @@ export default function AppHeader() {
     try {
       await exchangeToken(token, walletAddress, newRole)
       setRole(newRole)
+      navigate(newRole === 'buyer' ? '/buyer' : '/seller')
     } catch (err) {
       console.error('Failed to switch role', err)
     } finally {
@@ -61,18 +62,19 @@ export default function AppHeader() {
           <button
             className={s.accountBadge}
             type="button"
-            // TODO: route buyers to their own dashboard once it exists.
-            onClick={() => navigate('/seller')}
+            onClick={() => navigate(role === 'buyer' ? '/buyer' : '/seller')}
           >
             <span className={s.accountBadgeIcon}>
               <StoreIcon size={16} />
             </span>
             {role === 'seller' ? 'Seller account' : 'Buyer account'}
           </button>
-          <button className={s.navButton} type="button" onClick={() => navigate('/products')}>
-            <LinkIcon size={16} />
-            Products
-          </button>
+          {role === 'seller' && (
+            <button className={s.navButton} type="button" onClick={() => navigate('/products')}>
+              <LinkIcon size={16} />
+              Products
+            </button>
+          )}
           <button className={s.navButton} type="button" onClick={() => navigate('/transactions')}>
             <TransactionsIcon size={16} />
             Transactions
