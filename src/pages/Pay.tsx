@@ -18,6 +18,7 @@ import type { CounterOffer } from "../types/counterOffer";
 import { buy } from "../solana/instructions/buy";
 import type { Offer } from "../types/offer";
 import { config } from "../config/env";
+import InfoIcon from "../assets/icons/InfoIcon";
 import s from "../styles/pay.module.css";
 
 const RETURNABLE_FEE_LAMPORTS = config.arcPay.returnableFeeLamports;
@@ -369,20 +370,7 @@ export default function Pay() {
                 <span className={s.feeLabel}>
                   Returnable fee
                   <span className={s.feeTooltipWrap} tabIndex={0}>
-                    <svg
-                      className={s.feeInfoIcon}
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      aria-hidden="true"
-                    >
-                      <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
-                      <path
-                        d="M8 7v3.5"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                      />
-                      <circle cx="8" cy="5.25" r="0.75" fill="currentColor" />
-                    </svg>
+                    <InfoIcon className={s.feeInfoIcon} />
                     <span className={s.feeTooltip} role="tooltip">
                       This fee will be returned when the offer is settled, no
                       matter the outcome

@@ -113,7 +113,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 160px;
+    min-width: 220px;
     z-index: 100;
 }
 
@@ -138,6 +138,134 @@
 .walletDropdownItem:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.walletChainTag {
+    background: rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 6px;
+}
+
+.walletChainLogo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Chain brand wordmarks shown on offer cards / price lines. Both render at the
+   same overall height: Solana's bare wordmark is 18px tall; Sui's wordmark is
+   smaller (12px) but its chip's vertical padding brings the chip to the same
+   18px, so the two read as the same size despite different aspect ratios. */
+.chainLogoImg {
+    height: 18px;
+    width: auto;
+    display: block;
+}
+
+.chainLogoSui {
+    height: 12px;
+    background: #6fbcf0;
+    border-radius: 5px;
+    padding: 3px 7px;
+    box-sizing: content-box;
+}
+
+.walletChainLogoImg {
+    height: 18px;
+    width: auto;
+    display: block;
+}
+
+/* Sui's white wordmark sits on a light-blue brand chip. */
+.walletChainLogoSui {
+    background: #6fbcf0;
+    border-radius: 6px;
+    padding: 4px 8px;
+    box-sizing: content-box;
+}
+
+.walletDropdownLabel {
+    padding: 6px 12px 2px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-muted);
+}
+
+.walletChainRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.walletChainRow:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.walletChainRowActive {
+    background: rgba(167, 139, 250, 0.12);
+}
+
+.walletChainRowActive:hover {
+    background: rgba(167, 139, 250, 0.18);
+}
+
+.walletChainInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.walletChainName {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-white);
+}
+
+.walletChainCheck {
+    color: #a78bfa;
+    font-size: 12px;
+}
+
+.walletChainAddr {
+    font-size: 12px;
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.walletChainCopy {
+    background: none;
+    border: none;
+    color: var(--color-muted);
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: background 0.1s, color 0.1s;
+}
+
+.walletChainCopy:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-white);
+}
+
+.walletDropdownDivider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 4px 0;
 }
 
 .walletButton {

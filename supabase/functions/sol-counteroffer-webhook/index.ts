@@ -118,6 +118,9 @@ Deno.serve(async (req) => {
           tx_signature: txSignature,
           seller_amount: sellerAmount,
           fee_amount: feeAmount,
+          // This is the Solana counter-offer webhook, so the counter offer is
+          // always on Solana.
+          chain: "solana",
         });
 
       if (insertError) {

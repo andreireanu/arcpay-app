@@ -26,58 +26,11 @@ import type { CounterOffer } from "../types/counterOffer";
 import CounterOffersList from "../components/CounterOffersList";
 import SolIcon from "../assets/icons/SolIcon";
 import DownloadIcon from "../assets/icons/DownloadIcon";
+import PauseIcon from "../assets/icons/PauseIcon";
+import PlayIcon from "../assets/icons/PlayIcon";
+import CloseIcon from "../assets/icons/CloseIcon";
+import EyeIcon from "../assets/icons/EyeIcon";
 import s from "../styles/dashboard.module.css";
-
-function PauseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <rect x="6" y="4" width="4" height="16" rx="1" />
-      <rect x="14" y="4" width="4" height="16" rx="1" />
-    </svg>
-  );
-}
-
-function PlayIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M5 3l14 9-14 9V3z" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-    >
-      <path d="M18 6L6 18M6 6l12 12" />
-    </svg>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
 
 export default function OfferDetail() {
   const { offerId } = useParams<{ offerId: string }>();

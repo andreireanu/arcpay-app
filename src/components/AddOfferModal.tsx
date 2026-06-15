@@ -14,6 +14,8 @@ interface Props {
     unlimited: boolean,
   ) => void;
   creating: boolean;
+  /** The chain the seller is logged in on — drives the price currency label. */
+  chain: "solana" | "sui";
 }
 
 export default function AddOfferModal({
@@ -21,6 +23,7 @@ export default function AddOfferModal({
   onClose,
   onSubmit,
   creating,
+  chain,
 }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -29,6 +32,10 @@ export default function AddOfferModal({
   const [quantity, setQuantity] = useState("1");
 
   if (!open) return null;
+
+  // Both SOL and SUI use 9 decimals, so the price→base-unit conversion (× 1e9)
+  // is identical; only the displayed currency differs.
+  const currency = chain === "sui" ? "SUI" : "SOL";
 
   const canSubmit =
     name.length >= 3 &&
@@ -70,7 +77,7 @@ export default function AddOfferModal({
             />
           </div>
           <div className={s.modalField}>
-            <label className={s.modalLabel}>Price per unit (SOL)</label>
+            <label className={s.modalLabel}>Price per unit ({currency})</label>
             <input
               type="number"
               value={price}

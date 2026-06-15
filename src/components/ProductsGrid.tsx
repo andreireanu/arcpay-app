@@ -13,17 +13,18 @@ import {
 } from '../supabase/offers/offers'
 import { registerSellerIfNew } from '../supabase/sellers/sellers'
 import { getProduct } from '../supabase/products/products'
+import { getActiveChain } from '../supabase/auth/auth'
 import { sellerCancelOffer } from '../solana/instructions/sellerCancelOffer'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import AddOfferModal from './AddOfferModal'
+import ChainLogo from './ChainLogo'
 import PauseIcon from '../assets/icons/PauseIcon'
 import PlayIcon from '../assets/icons/PlayIcon'
 import CloseIcon from '../assets/icons/CloseIcon'
 import MenuIcon from '../assets/icons/MenuIcon'
 import LinkIcon from '../assets/icons/LinkIcon'
 import DownloadIcon from '../assets/icons/DownloadIcon'
-import SolIcon from '../assets/icons/SolIcon'
 import s from '../styles/dashboard.module.css'
 
 const QR_PRODUCT_ID = '2b78e60b-533d-469d-937e-aa462dc37c28'
@@ -107,7 +108,8 @@ export default function ProductsGrid({
     try {
       await registerSellerIfNew(walletAddress)
       const product = await getProduct(QR_PRODUCT_ID)
-      const offer = await insertOffer(walletAddress, name, description, priceLamports, product.fee_bps, quantity, unlimited)
+      // Record the offer on the chain the seller logged in with.
+      const offer = await insertOffer(walletAddress, name, description, priceLamports, product.fee_bps, quantity, unlimited, getActiveChain())
       setOffers((prev) => [offer, ...prev])
       setOfferModalOpen(false)
     } catch (err) {
@@ -289,8 +291,11 @@ export default function ProductsGrid({
                     </div>
                     <div className={s.offerCardBottom} onClick={(e) => e.stopPropagation()}>
                       <div className={s.offerCardPrice}>
-                        <SolIcon />
-                        <span>{(offer.price_lamports / 1e9).toFixed(4)} SOL</span>
+                        <ChainLogo chain={offer.chain} />
+                        <span>
+                          {(offer.price_lamports / 1e9).toFixed(4)}{' '}
+                          {offer.chain === 'sui' ? 'SUI' : 'SOL'}
+                        </span>
                       </div>
                       <span className={`${s.offerCardPill} ${s.offerCardAvailPill}`}>
                         {offer.unlimited
@@ -409,6 +414,7 @@ export default function ProductsGrid({
         onClose={() => setOfferModalOpen(false)}
         onSubmit={handleCreateOffer}
         creating={creating}
+        chain={getActiveChain()}
       />
     </section>
   )
