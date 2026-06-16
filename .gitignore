@@ -26,3 +26,9 @@ dist-ssr
 CLAUDE.md
 supabase/functions/.env
 /supabase/.temp
+
+# Local env files — never commit (VITE_SOLANA_RPC_URL carries the Helius API key).
+# .env.example is the committed template.
+.env
+.env.*
+!.env.example

@@ -8,6 +8,11 @@ export const config = {
     network: import.meta.env.VITE_SOLANA_NETWORK as string,
     programId: import.meta.env.VITE_PROGRAM_ID as string,
   },
+  sui: {
+    network: import.meta.env.VITE_SUI_NETWORK as string,
+    packageId: import.meta.env.VITE_SUI_PACKAGE_ID as string,
+    configId: import.meta.env.VITE_SUI_CONFIG_ID as string,
+  },
   dynamic: {
     environmentId: import.meta.env.VITE_DYNAMIC_ENV_ID as string,
   },

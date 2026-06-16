@@ -4,7 +4,7 @@ import type { Connection } from '@solana/web3.js'
 import type { AnchorWallet } from '@solana/wallet-adapter-react'
 import { BN } from '@coral-xyz/anchor'
 import { getProgram, PROGRAM_ID } from '../program'
-import { getOfferAuth } from '../../supabase/sol/offerAuthorize'
+import { getOfferAuth } from '../../supabase/authorize/offerAuthorize'
 
 function uuidToBytes(uuid: string): Uint8Array {
   const hex = uuid.replace(/-/g, '')

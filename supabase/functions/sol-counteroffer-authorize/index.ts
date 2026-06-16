@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
     return new Response("Internal error", { status: 500, headers: CORS });
   }
 
-  const keypairBytes = new Uint8Array(JSON.parse(Deno.env.get("BACKEND_KEYPAIR")!));
+  const keypairBytes = new Uint8Array(JSON.parse(Deno.env.get("SOL_BACKEND_KEYPAIR")!));
   const publicKeyBytes = keypairBytes.slice(32);
 
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 300); // 5-minute window

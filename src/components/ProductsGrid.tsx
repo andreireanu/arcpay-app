@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
-import { isSolanaWallet } from '@dynamic-labs/solana-core'
 import { useConnection } from '@solana/wallet-adapter-react'
-import { PublicKey } from '@solana/web3.js'
 import {
   insertOffer,
   pauseOffer,
@@ -14,7 +12,7 @@ import {
 import { registerSellerIfNew } from '../supabase/sellers/sellers'
 import { getProduct } from '../supabase/products/products'
 import { getActiveChain } from '../supabase/auth/auth'
-import { sellerCancelOffer } from '../solana/instructions/sellerCancelOffer'
+import { cancelOfferAsSeller } from '../payments/offerActions'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import AddOfferModal from './AddOfferModal'
@@ -183,14 +181,8 @@ export default function ProductsGrid({
         setCancelTarget(null)
         return
       }
-      if (!primaryWallet || !isSolanaWallet(primaryWallet)) return
-      const signer = await primaryWallet.getSigner()
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import('@solana/wallet-adapter-react').AnchorWallet
-      await sellerCancelOffer(connection, anchorWallet, cancelTarget.id)
+      if (!primaryWallet) return
+      await cancelOfferAsSeller(primaryWallet, connection, cancelTarget.id)
       setCancelTarget(null)
     } catch (err) {
       console.error('Failed to cancel offer', err)

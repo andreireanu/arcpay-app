@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
-import { isSolanaWallet } from '@dynamic-labs/solana-core'
 import { useConnection } from '@solana/wallet-adapter-react'
-import { PublicKey } from '@solana/web3.js'
 import { getOffersByWallet, watchOfferStatuses } from '../supabase/offers/offers'
 import {
   getCounterOffersBySeller,
@@ -13,7 +11,7 @@ import {
   watchCounterOfferStatuses,
 } from '../supabase/offers/getCounterOffers'
 import { getTransactionsBySeller, watchNewTransactions, watchSettledCounterOffers } from '../supabase/transactions/transactions'
-import { acceptCounter } from '../solana/instructions/acceptCounter'
+import { acceptCounterOffers } from '../payments/offerActions'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import type { Transaction } from '../types/transaction'
@@ -154,18 +152,12 @@ export default function SellerDashboard() {
   }
 
   async function handleAccept(ids: string[]) {
-    if (!primaryWallet || !isSolanaWallet(primaryWallet) || ids.length === 0) return
+    if (!primaryWallet || ids.length === 0) return
     if (acceptingRef.current) return
     acceptingRef.current = true
     setAccepting(true)
     try {
-      const signer = await primaryWallet.getSigner()
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import('@solana/wallet-adapter-react').AnchorWallet
-      await acceptCounter(connection, anchorWallet, ids)
+      await acceptCounterOffers(primaryWallet, connection, ids)
       // The accept tx is confirmed on chain; settlement (and the realtime
       // status flip to `confirmed`) follows within seconds via the backend.
       // Remove the rows optimistically so the Accept button doesn't reappear

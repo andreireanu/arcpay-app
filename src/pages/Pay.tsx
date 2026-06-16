@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
 import { useDynamicContext, getAuthToken } from "@dynamic-labs/sdk-react-core";
 import { isSolanaWallet } from "@dynamic-labs/solana-core";
+import { isSuiWallet } from "@dynamic-labs/sui-core";
 import { getOffer } from "../supabase/offers/offers";
-import { submitCounterOffer } from "../supabase/offers/counterOffers";
-import { cancelCounterOffer } from "../supabase/offers/cancelCounterOffer";
 import {
   getCounterOfferByBuyer,
   watchCounterOfferStatuses,
@@ -15,7 +13,11 @@ import {
 import { registerBuyer } from "../supabase/buyers/buyers";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
 import type { CounterOffer } from "../types/counterOffer";
-import { buy } from "../solana/instructions/buy";
+import {
+  buyOffer,
+  counterOffer,
+  cancelCounterOfferAction,
+} from "../payments/offerActions";
 import type { Offer } from "../types/offer";
 import { config } from "../config/env";
 import InfoIcon from "../assets/icons/InfoIcon";
@@ -46,7 +48,14 @@ export default function Pay() {
 
   const { connection } = useConnection();
   const { primaryWallet, setShowAuthFlow, user } = useDynamicContext();
-  const connected = !!primaryWallet && isSolanaWallet(primaryWallet);
+  // The buyer must be connected on the offer's chain: a Sui offer needs a Sui
+  // wallet, a Solana offer a Solana wallet. (Defaults to Solana until the offer
+  // loads.)
+  const connected =
+    !!primaryWallet &&
+    (offer?.chain === "sui"
+      ? isSuiWallet(primaryWallet)
+      : isSolanaWallet(primaryWallet));
   const exchangingRef = useRef(false);
 
   useEffect(() => {
@@ -124,16 +133,10 @@ export default function Pay() {
   }, [submitted, activeCounterOffer, offerId, primaryWallet]);
 
   async function handleBuy() {
-    if (!connected || !primaryWallet || !offerId || buying) return;
+    if (!connected || !primaryWallet || !offerId || buying || !offer) return;
     setBuying(true);
-    const signer = await primaryWallet.getSigner();
-    const anchorWallet = {
-      publicKey: new PublicKey(primaryWallet.address),
-      signTransaction: signer.signTransaction.bind(signer),
-      signAllTransactions: signer.signAllTransactions.bind(signer),
-    } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
     try {
-      await buy(connection, anchorWallet, offerId);
+      await buyOffer(primaryWallet, connection, offer);
       await registerBuyer(primaryWallet.address);
     } finally {
       setBuying(false);
@@ -148,13 +151,7 @@ export default function Pay() {
     if (lamports >= offer.price_lamports) return;
     setSubmitting(true);
     try {
-      const signer = await primaryWallet.getSigner();
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await submitCounterOffer(connection, anchorWallet, offerId, lamports);
+      await counterOffer(primaryWallet, connection, offer, lamports);
       await registerBuyer(primaryWallet.address);
       setSubmitted(true);
       setCounterOfferOpen(false);
@@ -171,15 +168,9 @@ export default function Pay() {
       return;
     setCanceling(true);
     try {
-      const signer = await primaryWallet.getSigner();
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await cancelCounterOffer(
+      await cancelCounterOfferAction(
+        primaryWallet,
         connection,
-        anchorWallet,
         activeCounterOffer.ephemeral_id,
       );
       setActiveCounterOffer(null);
@@ -216,7 +207,9 @@ export default function Pay() {
     );
   }
 
-  const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
+  // Both chains use 9 decimals (lamports / MIST); only the token label differs.
+  const currency = offer.chain === "sui" ? "SUI" : "SOL";
+  const priceAmount = (offer.price_lamports / 1_000_000_000).toFixed(4);
   const isAvailable = offer.status === "active";
 
   const offeredLamports = Math.max(
@@ -239,7 +232,7 @@ export default function Pay() {
 
           <div className={s.info}>
             <h1 className={s.name}>{offer.name}</h1>
-            <p className={s.price}>{priceSOL} SOL</p>
+            <p className={s.price}>{priceAmount} {currency}</p>
             {offer.description && (
               <p className={s.description}>{offer.description}</p>
             )}
@@ -293,7 +286,7 @@ export default function Pay() {
                         activeCounterOffer.fee_amount) /
                       1_000_000_000
                     ).toFixed(4)}{" "}
-                    SOL
+                    {currency}
                   </span>
                   <div className={s.activeOfferActions}>
                     <button
@@ -348,7 +341,7 @@ export default function Pay() {
               Learn more about offers
             </button>
             <div className={s.modalField}>
-              <label className={s.modalLabel}>Offered price (SOL)</label>
+              <label className={s.modalLabel}>Offered price ({currency})</label>
               <input
                 className={s.modalInput}
                 type="number"
@@ -363,7 +356,7 @@ export default function Pay() {
               <div className={s.feeRow}>
                 <span className={s.feeLabel}>Fees applied</span>
                 <span className={s.feeValue}>
-                  {formatSol(feesAppliedLamports)} SOL
+                  {formatSol(feesAppliedLamports)} {currency}
                 </span>
               </div>
               <div className={s.feeRow}>
@@ -378,13 +371,13 @@ export default function Pay() {
                   </span>
                 </span>
                 <span className={s.returnableValue}>
-                  ± {formatSol(RETURNABLE_FEE_LAMPORTS)} SOL
+                  ± {formatSol(RETURNABLE_FEE_LAMPORTS)} {currency}
                 </span>
               </div>
               <div className={s.feeRow}>
                 <span className={s.feeLabel}>Total amount charged</span>
                 <span className={s.feeValue}>
-                  ± {formatSol(totalChargedLamports)} SOL
+                  ± {formatSol(totalChargedLamports)} {currency}
                 </span>
               </div>
             </div>

@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
-import { isSolanaWallet } from '@dynamic-labs/solana-core'
 import { useConnection } from '@solana/wallet-adapter-react'
-import { PublicKey } from '@solana/web3.js'
 import {
   getItemsBought,
   getBuyerActiveCounterOffers,
@@ -14,7 +12,7 @@ import {
   getTransactionsByBuyer,
   watchBuyerTransactions,
 } from '../supabase/transactions/transactions'
-import { cancelOffer } from '../solana/instructions/cancelOffer'
+import { cancelCounterOfferAction } from '../payments/offerActions'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import type { Transaction } from '../types/transaction'
@@ -134,18 +132,11 @@ export default function BuyerDashboard() {
   }, [coIdKey, walletAddress])
 
   async function handleCancel(ephemeralId: string, id: string) {
-    if (!primaryWallet || !isSolanaWallet(primaryWallet) || cancelingRef.current)
-      return
+    if (!primaryWallet || cancelingRef.current) return
     cancelingRef.current = true
     setCancelingId(id)
     try {
-      const signer = await primaryWallet.getSigner()
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import('@solana/wallet-adapter-react').AnchorWallet
-      await cancelOffer(connection, anchorWallet, ephemeralId)
+      await cancelCounterOfferAction(primaryWallet, connection, ephemeralId)
       setCounterOffers((prev) => prev.filter((co) => co.id !== id))
     } catch (err) {
       console.error('Failed to cancel counter offer', err)

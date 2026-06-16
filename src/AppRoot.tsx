@@ -20,7 +20,10 @@ import { router } from "./router";
 // a `sui` suffix, so Phantom-on-Sui is `phantomsui` (vs `phantom` on Solana).
 // `dynamicwaas` is the embedded wallet behind email login. The login flow
 // further scopes this list to the chosen chain.
-const ALLOWED_WALLET_KEYS = ["phantom", "phantomsui", "dynamicwaas"];
+// Phantom for Solana (`phantom`), Slush for Sui (`slushsui` — testnet-capable,
+// so it shows normal tx messages instead of Phantom's mainnet "Confirm
+// (unsafe)" warning), and the embedded email wallet (`dynamicwaas`) on both.
+const ALLOWED_WALLET_KEYS = ["phantom", "slushsui", "dynamicwaas"];
 
 export default function AppRoot() {
   // Which chain the login auth flow is scoped to. Seeded from the last session's

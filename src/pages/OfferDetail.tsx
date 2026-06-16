@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import QRCode from "qrcode";
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
-import { isSolanaWallet } from "@dynamic-labs/solana-core";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
 import {
   getOffer,
   pauseOffer,
@@ -19,8 +17,10 @@ import {
   watchCounterOfferStatuses,
   watchNewCounterOffers,
 } from "../supabase/offers/getCounterOffers";
-import { acceptCounter } from "../solana/instructions/acceptCounter";
-import { sellerCancelOffer } from "../solana/instructions/sellerCancelOffer";
+import {
+  acceptCounterOffers,
+  cancelOfferAsSeller,
+} from "../payments/offerActions";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
 import CounterOffersList from "../components/CounterOffersList";
@@ -169,14 +169,8 @@ export default function OfferDetail() {
       }
 
       // Active counter offers exist — go on-chain so the webhook refunds them.
-      if (!primaryWallet || !isSolanaWallet(primaryWallet)) return;
-      const signer = await primaryWallet.getSigner();
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await sellerCancelOffer(connection, anchorWallet, offer.id);
+      if (!primaryWallet) return;
+      await cancelOfferAsSeller(primaryWallet, connection, offer.id);
       setCancelModalOpen(false);
     } catch (err) {
       console.error("Failed to cancel offer", err);
@@ -230,19 +224,12 @@ export default function OfferDetail() {
   }
 
   async function handleAccept(ids: string[]) {
-    if (!primaryWallet || !isSolanaWallet(primaryWallet) || ids.length === 0)
-      return;
+    if (!primaryWallet || ids.length === 0) return;
     if (acceptingRef.current) return;
     acceptingRef.current = true;
     setAccepting(true);
     try {
-      const signer = await primaryWallet.getSigner();
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await acceptCounter(connection, anchorWallet, ids);
+      await acceptCounterOffers(primaryWallet, connection, ids);
     } catch (err) {
       console.error("Accept counter offer failed", err);
     } finally {
