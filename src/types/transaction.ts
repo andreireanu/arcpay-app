@@ -9,4 +9,5 @@ export interface Transaction {
   quantity: number;
   created_at: string;
   source: "buy" | "counter_offer";
+  chain: "sui" | "solana";
 }

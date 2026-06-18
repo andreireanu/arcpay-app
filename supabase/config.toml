@@ -20,6 +20,24 @@ verify_jwt = false
 [functions.sol-refund-webhook]
 verify_jwt = false
 
+# The Sui event indexer (our own server) POSTs decoded events here. No Supabase
+# session — it authenticates with the SUI_WEBHOOK_SECRET shared secret inside the
+# handler, so the gateway JWT check must be off like the Helius webhooks.
+[functions.sui-buy-webhook]
+verify_jwt = false
+
+[functions.sui-counteroffer-webhook]
+verify_jwt = false
+
+[functions.sui-cancel-webhook]
+verify_jwt = false
+
+[functions.sui-refund-webhook]
+verify_jwt = false
+
+[functions.sui-accept-webhook]
+verify_jwt = false
+
 # auth-exchange runs before the user has a Supabase session (it mints one), so
 # it must also be callable without a JWT.
 [functions.auth-exchange]

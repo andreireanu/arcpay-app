@@ -11,7 +11,7 @@ import {
   watchCounterOfferStatuses,
 } from '../supabase/offers/getCounterOffers'
 import { getTransactionsBySeller, watchNewTransactions, watchSettledCounterOffers } from '../supabase/transactions/transactions'
-import { acceptCounterOffers } from '../payments/offerActions'
+import { acceptCounterOffers } from '../dispatcher/actions'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import type { Transaction } from '../types/transaction'

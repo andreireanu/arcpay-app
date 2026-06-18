@@ -11,9 +11,9 @@ interface CounterOffersListProps {
   onHide?: (ids: string[]) => void
   // When set, the list switches to BUYER mode: no green selection summary and no
   // accept/hide/checkbox — each row instead gets a Cancel button (the buyer
-  // withdrawing their own counter offer). Keyed by the counter offer's
-  // ephemeral_id + id, matching the on-chain buyerCancelOffer call.
-  onCancel?: (ephemeralId: string, id: string) => void
+  // withdrawing their own counter offer). Receives the whole counter offer so
+  // the dispatcher can route the cancel to the right chain.
+  onCancel?: (counterOffer: CounterOffer) => void
   cancelingId?: string | null
   // When set, each row shows the name of the offer it belongs to. Used on the
   // seller dashboard, where counter offers from every listing are pooled, so the
@@ -208,7 +208,7 @@ export default function CounterOffersList({
                       <button
                         className={s.hideOfferBtn}
                         disabled={cancelingId === co.id}
-                        onClick={() => onCancel?.(co.ephemeral_id, co.id)}
+                        onClick={() => onCancel?.(co)}
                       >
                         {cancelingId === co.id ? 'Canceling…' : 'Cancel'}
                       </button>

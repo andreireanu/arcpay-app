@@ -20,11 +20,12 @@ import {
 import {
   acceptCounterOffers,
   cancelOfferAsSeller,
-} from "../payments/offerActions";
+} from "../dispatcher/actions";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
 import CounterOffersList from "../components/CounterOffersList";
 import SolIcon from "../assets/icons/SolIcon";
+import SuiIcon from "../assets/icons/SuiIcon";
 import DownloadIcon from "../assets/icons/DownloadIcon";
 import PauseIcon from "../assets/icons/PauseIcon";
 import PlayIcon from "../assets/icons/PlayIcon";
@@ -170,7 +171,7 @@ export default function OfferDetail() {
 
       // Active counter offers exist — go on-chain so the webhook refunds them.
       if (!primaryWallet) return;
-      await cancelOfferAsSeller(primaryWallet, connection, offer.id);
+      await cancelOfferAsSeller(primaryWallet, connection, offer);
       setCancelModalOpen(false);
     } catch (err) {
       console.error("Failed to cancel offer", err);
@@ -301,7 +302,8 @@ export default function OfferDetail() {
     );
   }
 
-  const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
+  const isSui = offer.chain === "sui";
+  const price = (offer.price_lamports / 1_000_000_000).toFixed(4);
   const canAct = offer.status === "active" || offer.status === "paused";
 
   return (
@@ -337,8 +339,8 @@ export default function OfferDetail() {
                 <p className={s.offerDetailDescription}>{offer.description}</p>
               )}
               <div className={s.offerDetailPrice}>
-                <SolIcon size={30} />
-                <span>{priceSOL} SOL</span>
+                {isSui ? <SuiIcon size={30} /> : <SolIcon size={30} />}
+                <span>{price} {isSui ? "SUI" : "SOL"}</span>
               </div>
 
               <div className={s.offerDetailActions}>

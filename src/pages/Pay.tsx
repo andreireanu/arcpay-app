@@ -17,7 +17,7 @@ import {
   buyOffer,
   counterOffer,
   cancelCounterOfferAction,
-} from "../payments/offerActions";
+} from "../dispatcher/actions";
 import type { Offer } from "../types/offer";
 import { config } from "../config/env";
 import InfoIcon from "../assets/icons/InfoIcon";
@@ -41,6 +41,7 @@ export default function Pay() {
   const [buying, setBuying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [counterError, setCounterError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [activeCounterOffer, setActiveCounterOffer] =
     useState<CounterOffer | null>(null);
@@ -150,6 +151,7 @@ export default function Pay() {
     if (!lamports || lamports <= 0) return;
     if (lamports >= offer.price_lamports) return;
     setSubmitting(true);
+    setCounterError(null);
     try {
       await counterOffer(primaryWallet, connection, offer, lamports);
       await registerBuyer(primaryWallet.address);
@@ -158,6 +160,14 @@ export default function Pay() {
       setCounterPrice("");
     } catch (err) {
       console.error("Failed to submit counter offer", err);
+      const message = err instanceof Error ? err.message : String(err);
+      if (/InsufficientCoinBalance|insufficient/i.test(message)) {
+        setCounterError(
+          `Not enough ${currency} in your wallet to cover the offer plus network fees.`,
+        );
+      } else {
+        setCounterError("Could not submit your offer. Please try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -171,7 +181,7 @@ export default function Pay() {
       await cancelCounterOfferAction(
         primaryWallet,
         connection,
-        activeCounterOffer.ephemeral_id,
+        activeCounterOffer,
       );
       setActiveCounterOffer(null);
     } catch (err) {
@@ -208,7 +218,8 @@ export default function Pay() {
   }
 
   // Both chains use 9 decimals (lamports / MIST); only the token label differs.
-  const currency = offer.chain === "sui" ? "SUI" : "SOL";
+  const isSui = offer.chain === "sui";
+  const currency = isSui ? "SUI" : "SOL";
   const priceAmount = (offer.price_lamports / 1_000_000_000).toFixed(4);
   const isAvailable = offer.status === "active";
 
@@ -219,8 +230,11 @@ export default function Pay() {
   const feesAppliedLamports = Math.floor(
     (offeredLamports * offer.fee_bps) / 10000,
   );
+  // The returnable fee is Solana Offer-PDA rent; Sui has no equivalent buyer deposit.
   const totalChargedLamports =
-    offeredLamports + RETURNABLE_FEE_LAMPORTS + TX_COST_LAMPORTS;
+    offeredLamports +
+    (isSui ? 0 : RETURNABLE_FEE_LAMPORTS) +
+    TX_COST_LAMPORTS;
 
   return (
     <>
@@ -327,7 +341,10 @@ export default function Pay() {
       {counterOfferOpen && (
         <div
           className={s.modalOverlay}
-          onClick={() => setCounterOfferOpen(false)}
+          onClick={() => {
+            setCounterOfferOpen(false);
+            setCounterError(null);
+          }}
         >
           <div className={s.modal} onClick={(e) => e.stopPropagation()}>
             <h2 className={s.modalTitle}>Create offer</h2>
@@ -349,7 +366,10 @@ export default function Pay() {
                 min="0"
                 placeholder="0.00"
                 value={counterPrice}
-                onChange={(e) => setCounterPrice(e.target.value)}
+                onChange={(e) => {
+                  setCounterPrice(e.target.value);
+                  setCounterError(null);
+                }}
               />
             </div>
             <div className={s.feeBreakdown}>
@@ -359,21 +379,23 @@ export default function Pay() {
                   {formatSol(feesAppliedLamports)} {currency}
                 </span>
               </div>
-              <div className={s.feeRow}>
-                <span className={s.feeLabel}>
-                  Returnable fee
-                  <span className={s.feeTooltipWrap} tabIndex={0}>
-                    <InfoIcon className={s.feeInfoIcon} />
-                    <span className={s.feeTooltip} role="tooltip">
-                      This fee will be returned when the offer is settled, no
-                      matter the outcome
+              {!isSui && (
+                <div className={s.feeRow}>
+                  <span className={s.feeLabel}>
+                    Returnable fee
+                    <span className={s.feeTooltipWrap} tabIndex={0}>
+                      <InfoIcon className={s.feeInfoIcon} />
+                      <span className={s.feeTooltip} role="tooltip">
+                        This fee will be returned when the offer is settled, no
+                        matter the outcome
+                      </span>
                     </span>
                   </span>
-                </span>
-                <span className={s.returnableValue}>
-                  ± {formatSol(RETURNABLE_FEE_LAMPORTS)} {currency}
-                </span>
-              </div>
+                  <span className={s.returnableValue}>
+                    ± {formatSol(RETURNABLE_FEE_LAMPORTS)} {currency}
+                  </span>
+                </div>
+              )}
               <div className={s.feeRow}>
                 <span className={s.feeLabel}>Total amount charged</span>
                 <span className={s.feeValue}>
@@ -381,10 +403,16 @@ export default function Pay() {
                 </span>
               </div>
             </div>
+            {counterError && (
+              <p className={s.errorMessage}>{counterError}</p>
+            )}
             <div className={s.modalActions}>
               <button
                 className={s.modalCancelButton}
-                onClick={() => setCounterOfferOpen(false)}
+                onClick={() => {
+                  setCounterOfferOpen(false);
+                  setCounterError(null);
+                }}
               >
                 Cancel
               </button>

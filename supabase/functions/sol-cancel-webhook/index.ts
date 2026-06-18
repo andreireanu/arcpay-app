@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
 
         const { data: canceledRows, error } = await supabase
           .from("qr_counteroffers")
-          .update({ status: "buyer_canceled", rent_returned: true })
+          .update({ status: "buyer_canceled", returned: true })
           .eq("ephemeral_id", ephemeralUuid)
           .select("id");
 

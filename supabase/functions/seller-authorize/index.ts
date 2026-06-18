@@ -32,6 +32,25 @@ function pubkeyToBytes(address: string): Uint8Array {
   return out;
 }
 
+// A Sui address is a 32-byte value written as 0x + 64 hex (leading zeros may be
+// trimmed). `sui::address::to_bytes` yields those 32 bytes, which is what the
+// contract hashes into the auth message.
+function suiAddressBytes(addr: string): Uint8Array {
+  const hex = addr.replace(/^0x/, "").padStart(64, "0");
+  const bytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return bytes;
+}
+
+// Sui ed25519 seed (hexWithoutFlag — the raw 32-byte private key) → keypair.
+function suiKeypairFromHex(hex: string): { secretKey: Uint8Array; publicKey: Uint8Array } {
+  const clean = hex.trim().replace(/^0x/, "");
+  const seed = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) seed[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  const pair = nacl.sign.keyPair.fromSeed(seed);
+  return { secretKey: pair.secretKey, publicKey: pair.publicKey };
+}
+
 function uuidToBytes(uuid: string): Uint8Array {
   const hex = uuid.replace(/-/g, "");
   const bytes = new Uint8Array(16);
@@ -39,14 +58,65 @@ function uuidToBytes(uuid: string): Uint8Array {
   return bytes;
 }
 
+interface SignedSeller {
+  signature: string;
+  expiry: number;
+  backendPublicKey: string;
+}
+
+// Signed message layout (56 bytes), little-endian:
+//   [0..32] seller | [32..48] offer_id | [48..56] expiry_ms
+//
+// Shared by seller accept and seller cancel — the backend attests the offer
+// belongs to the seller. For accept, offer_id is the ephemeral witness uuid
+// (qr_accepted_counter.id); for cancel, it is the offer's own uuid. Only three
+// things differ by chain: the backend key, how an address encodes to 32 bytes
+// (Solana base58 pubkey vs Sui 0x-hex), and the expiry unit (Solana's clock is
+// unix SECONDS, Sui's Clock is MS).
+function signSeller(chain: string, sellerWallet: string, offerUuid: string): SignedSeller {
+  const isSui = chain === "sui";
+
+  let secretKey: Uint8Array;
+  let sellerBytes: Uint8Array;
+  let expiry: bigint;
+  let backendPublicKey: string;
+
+  if (isSui) {
+    const parsed = suiKeypairFromHex(Deno.env.get("SUI_BACKEND_KEYPAIR")!);
+    secretKey = parsed.secretKey;
+    sellerBytes = suiAddressBytes(sellerWallet);
+    expiry = BigInt(Date.now() + 300_000); // ms — Sui Clock is millisecond-based
+    backendPublicKey =
+      "0x" + [...parsed.publicKey].map((b) => b.toString(16).padStart(2, "0")).join("");
+  } else {
+    const kp = new Uint8Array(JSON.parse(Deno.env.get("SOL_BACKEND_KEYPAIR")!));
+    secretKey = kp;
+    sellerBytes = pubkeyToBytes(sellerWallet);
+    expiry = BigInt(Math.floor(Date.now() / 1000) + 300); // seconds — Solana clock
+    backendPublicKey = base58Encode(kp.slice(32));
+  }
+
+  const expiryBytes = new Uint8Array(8);
+  // Unsigned LE u64 — matches both Solana's i64 (positive) and Sui's bcs u64.
+  new DataView(expiryBytes.buffer).setBigUint64(0, expiry, true);
+
+  const message = new Uint8Array(56);
+  message.set(sellerBytes, 0);
+  message.set(uuidToBytes(offerUuid), 32);
+  message.set(expiryBytes, 48);
+
+  const signature = nacl.sign.detached(message, secretKey);
+  return {
+    signature: btoa(String.fromCharCode(...signature)),
+    expiry: Number(expiry),
+    backendPublicKey,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
-  const { counter_offer_ids, seller_wallet } = await req.json();
-
-  if (!Array.isArray(counter_offer_ids) || counter_offer_ids.length === 0) {
-    return new Response("counter_offer_ids must be a non-empty array", { status: 400, headers: CORS });
-  }
+  const { counter_offer_ids, offer_id, seller_wallet } = await req.json();
   if (!seller_wallet) {
     return new Response("Missing seller_wallet", { status: 400, headers: CORS });
   }
@@ -56,12 +126,38 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // ── Cancel: the seller cancels their own offer ──────────────────────────────
+  // Signs the offer's own uuid. No witness row and no amounts — settlement is a
+  // separate flow; this only attests ownership so the contract emits the cancel
+  // event.
+  if (offer_id) {
+    const { data: offer, error } = await supabase
+      .from("qr_offers")
+      .select("seller_wallet, chain")
+      .eq("id", offer_id)
+      .maybeSingle();
+
+    if (error || !offer) return new Response("Offer not found", { status: 404, headers: CORS });
+    if (offer.seller_wallet !== seller_wallet) {
+      return new Response("Unauthorized: offer does not belong to this seller", { status: 403, headers: CORS });
+    }
+
+    const signed = signSeller(offer.chain, seller_wallet, offer_id);
+    return Response.json({ ...signed, sellerWallet: seller_wallet }, { headers: CORS });
+  }
+
+  // ── Accept: the seller accepts a set of counter offers ──────────────────────
+  if (!Array.isArray(counter_offer_ids) || counter_offer_ids.length === 0) {
+    return new Response("provide offer_id (cancel) or counter_offer_ids (accept)", { status: 400, headers: CORS });
+  }
+
   // Fetch all counter offers and join with their parent offer to verify seller
-  // ownership. No amounts are signed: the accept is a consent-only event, and
-  // settlement reads each record's escrow + the stored fee split per offer.
+  // ownership and read the chain. No amounts are signed: the accept is a
+  // consent-only event, and settlement reads each record's escrow + stored fee
+  // split per offer.
   const { data: counterOffers, error: fetchError } = await supabase
     .from("qr_counteroffers")
-    .select("id, status, expiry_at, offer_id, qr_offers(seller_wallet)")
+    .select("id, status, expiry_at, offer_id, qr_offers(seller_wallet, chain)")
     .in("id", counter_offer_ids);
 
   if (fetchError || !counterOffers) {
@@ -73,8 +169,9 @@ Deno.serve(async (req) => {
     return new Response("One or more counter offers not found", { status: 404, headers: CORS });
   }
 
+  let chain = "solana";
   for (const co of counterOffers) {
-    const offer = co.qr_offers as { seller_wallet: string } | null;
+    const offer = co.qr_offers as { seller_wallet: string; chain: string } | null;
     if (offer?.seller_wallet !== seller_wallet) {
       return new Response("Unauthorized: counter offer does not belong to this seller", { status: 403, headers: CORS });
     }
@@ -84,9 +181,10 @@ Deno.serve(async (req) => {
     if (new Date(co.expiry_at) <= new Date()) {
       return new Response(`Counter offer ${co.id} has expired`, { status: 400, headers: CORS });
     }
+    chain = offer.chain;
   }
 
-  // Insert witness row — id is the ephemeral UUID passed to the program
+  // Insert witness row — id is the ephemeral UUID passed to the program.
   const { data: witness, error: insertError } = await supabase
     .from("qr_accepted_counter")
     .insert({ offers: counter_offer_ids, status: "pending" })
@@ -99,30 +197,6 @@ Deno.serve(async (req) => {
   }
 
   const ephemeralUuid = witness.id as string;
-
-  const keypairBytes = new Uint8Array(JSON.parse(Deno.env.get("SOL_BACKEND_KEYPAIR")!));
-  const publicKeyBytes = keypairBytes.slice(32);
-
-  const expiry = BigInt(Math.floor(Date.now() / 1000) + 300); // 5-minute window
-
-  // Message layout (56 bytes) matching auth_accept_offer.rs:
-  //   [0..32]  seller pubkey
-  //   [32..48] ephemeral uuid (16 bytes)
-  //   [48..56] expiry (i64 LE)
-  const expiryBytes = new Uint8Array(8);
-  new DataView(expiryBytes.buffer).setBigInt64(0, expiry, true);
-
-  const message = new Uint8Array(56);
-  message.set(pubkeyToBytes(seller_wallet), 0);
-  message.set(uuidToBytes(ephemeralUuid), 32);
-  message.set(expiryBytes, 48);
-
-  const signature = nacl.sign.detached(message, keypairBytes);
-
-  return Response.json({
-    ephemeralUuid,
-    signature: btoa(String.fromCharCode(...signature)),
-    expiry: Number(expiry),
-    backendPublicKey: base58Encode(publicKeyBytes),
-  }, { headers: CORS });
+  const signed = signSeller(chain, seller_wallet, ephemeralUuid);
+  return Response.json({ ephemeralUuid, ...signed }, { headers: CORS });
 });

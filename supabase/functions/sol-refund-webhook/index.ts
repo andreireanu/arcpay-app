@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
           .update({
             status: "confirmed",
             confirmed_at: new Date().toISOString(),
-            rent_returned: true,
+            returned: true,
             settle_tx_signature: txSignature,
           })
           .eq("ephemeral_id", ephemeralUuid)
@@ -119,12 +119,12 @@ Deno.serve(async (req) => {
 
         const { error } = await supabase
           .from("qr_counteroffers")
-          .update({ rent_returned: true, settle_tx_signature: txSignature })
+          .update({ returned: true, settle_tx_signature: txSignature })
           .eq("ephemeral_id", ephemeralUuid);
 
         if (error)
-          console.error("rent_returned update error", ephemeralUuid, error);
-        else console.log("rent_returned set for ephemeral", ephemeralUuid);
+          console.error("returned update error", ephemeralUuid, error);
+        else console.log("returned set for ephemeral", ephemeralUuid);
       }
     }
   }

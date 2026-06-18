@@ -14,4 +14,6 @@ export interface CounterOffer {
     | "seller_canceled";
   created_at: string;
   expiry_at: string;
+  chain: "sui" | "solana";
+  sui_object_id: string | null;
 }

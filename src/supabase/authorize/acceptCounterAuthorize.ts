@@ -14,7 +14,7 @@ export async function getAcceptCounterAuth(
   // invoke() attaches the logged-in seller's bearer token, so the function can
   // run with JWT verification on (only authenticated sellers may request a
   // signature). The signing logic still binds to the seller's wallet on-chain.
-  const { data, error } = await supabase.functions.invoke('sol-accept-authorize', {
+  const { data, error } = await supabase.functions.invoke('seller-authorize', {
     body: { counter_offer_ids: counterOfferIds, seller_wallet: sellerWallet },
   })
   if (error) throw error

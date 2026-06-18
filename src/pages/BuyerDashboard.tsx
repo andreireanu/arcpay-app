@@ -12,7 +12,7 @@ import {
   getTransactionsByBuyer,
   watchBuyerTransactions,
 } from '../supabase/transactions/transactions'
-import { cancelCounterOfferAction } from '../payments/offerActions'
+import { cancelCounterOfferAction } from '../dispatcher/actions'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import type { Transaction } from '../types/transaction'
@@ -131,13 +131,13 @@ export default function BuyerDashboard() {
     })
   }, [coIdKey, walletAddress])
 
-  async function handleCancel(ephemeralId: string, id: string) {
+  async function handleCancel(counterOffer: CounterOffer) {
     if (!primaryWallet || cancelingRef.current) return
     cancelingRef.current = true
-    setCancelingId(id)
+    setCancelingId(counterOffer.id)
     try {
-      await cancelCounterOfferAction(primaryWallet, connection, ephemeralId)
-      setCounterOffers((prev) => prev.filter((co) => co.id !== id))
+      await cancelCounterOfferAction(primaryWallet, connection, counterOffer)
+      setCounterOffers((prev) => prev.filter((co) => co.id !== counterOffer.id))
     } catch (err) {
       console.error('Failed to cancel counter offer', err)
     } finally {

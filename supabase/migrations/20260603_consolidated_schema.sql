@@ -1,4 +1,6 @@
--- ArcPay — full schema (consolidated, replaces all prior migrations)
+-- ArcPay — full schema (single consolidated file; replaces all prior migrations)
+--
+DROP VIEW  IF EXISTS qr_seller_transactions CASCADE;
 DROP TABLE IF EXISTS qr_accepted_counter CASCADE;
 DROP TABLE IF EXISTS qr_counteroffers_seller_state CASCADE;
 DROP TABLE IF EXISTS qr_counteroffers CASCADE;
@@ -65,6 +67,10 @@ CREATE POLICY "users manage own buyer profile"
   WITH CHECK (auth.uid() = user_id);
 
 -- ─── qr_offers ───────────────────────────────────────────────────────────────
+-- `chain` is the source of truth for which chain an offer lives on (Solana | Sui).
+-- price_lamports is base units interpreted per chain (lamports or MIST — both 9
+-- decimals), so the value alone is ambiguous; chain disambiguates it and selects
+-- the settlement path (Anchor + Helius webhook vs Move + Sui event indexer).
 CREATE TABLE public.qr_offers (
   id             uuid        NOT NULL DEFAULT gen_random_uuid(),
   name           text        NOT NULL,
@@ -76,9 +82,13 @@ CREATE TABLE public.qr_offers (
   unlimited      boolean     NOT NULL DEFAULT true,
   quantity       integer     NOT NULL DEFAULT 2147483647,
   quantity_sold  integer     NOT NULL DEFAULT 0,
+  chain          text        NOT NULL DEFAULT 'solana',
   created_at     timestamptz DEFAULT now(),
-  CONSTRAINT qr_offers_pkey PRIMARY KEY (id)
+  CONSTRAINT qr_offers_pkey PRIMARY KEY (id),
+  CONSTRAINT qr_offers_chain_check CHECK (chain IN ('solana', 'sui'))
 );
+
+CREATE INDEX qr_offers_chain_idx ON public.qr_offers (chain);
 
 ALTER TABLE qr_offers ENABLE ROW LEVEL SECURITY;
 
@@ -118,6 +128,10 @@ CREATE POLICY "sellers can delete own offers"
 ALTER PUBLICATION supabase_realtime ADD TABLE qr_offers;
 
 -- ─── qr_transactions ─────────────────────────────────────────────────────────
+-- A completed buy, recorded by the per-chain settlement path (Solana Helius
+-- webhook; Sui event indexer). `chain` is denormalized from qr_offers because the
+-- dashboards receive raw Realtime INSERT rows with no join and must render SOL vs
+-- SUI from the row itself.
 CREATE TABLE public.qr_transactions (
   id             uuid        NOT NULL DEFAULT gen_random_uuid(),
   offer_id       uuid        NOT NULL REFERENCES qr_offers(id),
@@ -126,8 +140,10 @@ CREATE TABLE public.qr_transactions (
   seller_amount  bigint      NOT NULL,
   fee_amount     bigint      NOT NULL,
   quantity       integer     NOT NULL DEFAULT 1,
+  chain          text        NOT NULL DEFAULT 'solana',
   created_at     timestamptz DEFAULT now(),
-  CONSTRAINT qr_transactions_pkey PRIMARY KEY (id)
+  CONSTRAINT qr_transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT qr_transactions_chain_check CHECK (chain IN ('solana', 'sui'))
 );
 
 ALTER TABLE qr_transactions ENABLE ROW LEVEL SECURITY;
@@ -143,8 +159,17 @@ CREATE POLICY "sellers can read own transactions"
     )
   );
 
--- Publish for Realtime so the seller dashboard's Transactions tab updates live
--- when a buy lands. RLS above scopes delivery to the seller's own offers.
+-- Buyers may read the rows where they are the buyer (buyer dashboard's "Items
+-- bought" + Transactions tab). Gate on app_metadata.wallet_address (service-role
+-- written during auth-exchange), NOT user_metadata (end-user editable).
+CREATE POLICY "buyers can read own transactions"
+  ON qr_transactions FOR SELECT TO authenticated
+  USING (
+    buyer_wallet = (auth.jwt() -> 'app_metadata' ->> 'wallet_address')
+  );
+
+-- Publish for Realtime so the dashboards update live when a buy lands. RLS above
+-- scopes delivery to each role's own rows.
 ALTER PUBLICATION supabase_realtime ADD TABLE qr_transactions;
 
 -- ─── qr_ephemeral ────────────────────────────────────────────────────────────
@@ -156,26 +181,42 @@ CREATE TABLE public.qr_ephemeral (
 );
 
 -- RLS enabled with no permissive policies — backend-only table. Only the service
--- role (the sol-counteroffer-* edge functions) reads/writes it; anon and
+-- role (the counteroffer-authorize edge function) reads/writes it; anon and
 -- authenticated are denied. The linter's rls_enabled_no_policy INFO is expected.
 ALTER TABLE qr_ephemeral ENABLE ROW LEVEL SECURITY;
 
 -- ─── qr_counteroffers ────────────────────────────────────────────────────────
+-- `chain` is denormalized from qr_offers: the buyer's "active offers" list reads
+-- this table DIRECTLY (active rows never reach the qr_seller_transactions view,
+-- which only unions CONFIRMED rows), so the row must carry chain to render SOL vs
+-- SUI. `sui_object_id` holds the on-chain object id of a Sui counter offer so it
+-- can be cancelled/deleted later (Solana counter offers live in a PDA derivable
+-- from ephemeral_id and need nothing stored); NULL for Solana rows.
 CREATE TABLE public.qr_counteroffers (
-  id             uuid        NOT NULL DEFAULT gen_random_uuid(),
-  offer_id       uuid        NOT NULL REFERENCES qr_offers(id),
-  ephemeral_id   uuid        NOT NULL,
-  buyer_wallet   text        NOT NULL,
-  tx_signature   text        NOT NULL UNIQUE,
-  seller_amount  bigint      NOT NULL,
-  fee_amount     bigint      NOT NULL,
-  quantity       integer     NOT NULL DEFAULT 1,
-  status         text        NOT NULL DEFAULT 'active',
-  rent_returned  boolean     NOT NULL DEFAULT false,
-  expiry_at      timestamptz NOT NULL DEFAULT now() + INTERVAL '3 months',
-  created_at     timestamptz DEFAULT now(),
-  CONSTRAINT qr_counteroffers_pkey PRIMARY KEY (id)
+  id                  uuid        NOT NULL DEFAULT gen_random_uuid(),
+  offer_id            uuid        NOT NULL REFERENCES qr_offers(id),
+  ephemeral_id        uuid        NOT NULL,
+  sui_object_id       text,
+  buyer_wallet        text        NOT NULL,
+  tx_signature        text        NOT NULL UNIQUE,
+  seller_amount       bigint      NOT NULL,
+  fee_amount          bigint      NOT NULL,
+  quantity            integer     NOT NULL DEFAULT 1,
+  status              text        NOT NULL DEFAULT 'active',
+  returned            boolean     NOT NULL DEFAULT false,
+  settle_tx_signature text,
+  confirmed_at        timestamptz,
+  chain               text        NOT NULL DEFAULT 'solana',
+  expiry_at           timestamptz NOT NULL DEFAULT now() + INTERVAL '3 months',
+  created_at          timestamptz DEFAULT now(),
+  CONSTRAINT qr_counteroffers_pkey PRIMARY KEY (id),
+  CONSTRAINT qr_counteroffers_chain_check CHECK (chain IN ('solana', 'sui'))
 );
+
+COMMENT ON COLUMN qr_counteroffers.settle_tx_signature IS
+  'signature of the admin_settle_offer tx that consumed this record (audit; idempotency is the conditional status flip)';
+COMMENT ON COLUMN qr_counteroffers.confirmed_at IS
+  'when the settle webhook flipped this counter offer to confirmed (execution time), vs created_at = placement time';
 
 ALTER TABLE qr_counteroffers ENABLE ROW LEVEL SECURITY;
 
@@ -264,7 +305,6 @@ CREATE POLICY "sellers unhide own counteroffers"
 -- Ephemeral witness table for a seller accepting one or more counter offers.
 -- Created when the seller initiates acceptance; updated by the webhook on
 -- settlement. Mirrors the lifecycle pattern of qr_ephemeral.
-
 CREATE TABLE public.qr_accepted_counter (
   id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   offers     jsonb       NOT NULL,                          -- array of qr_counteroffers IDs
@@ -275,6 +315,56 @@ CREATE TABLE public.qr_accepted_counter (
 -- RLS enabled with no permissive policies — only the service role (backend)
 -- can read or write this table. Anon and authenticated roles are denied.
 ALTER TABLE qr_accepted_counter ENABLE ROW LEVEL SECURITY;
+
+-- ─── qr_seller_transactions (view) ───────────────────────────────────────────
+-- The seller's transaction history is a UNION of two sources: direct buys
+-- (qr_transactions) and confirmed counter offers (qr_counteroffers WHERE
+-- status = 'confirmed'), exposed as one ordered, paginatable stream.
+--
+-- security_invoker = true → the view runs with the caller's privileges, so RLS on
+-- the underlying tables scopes rows per role. It is read from BOTH sides (a seller
+-- reading their offers' transactions, a buyer reading their own purchases); a
+-- wallet that both sells and buys satisfies both policies, so each query must
+-- filter explicitly — buyers by buyer_wallet, sellers by seller_wallet. A counter
+-- offer contributes its execution time (confirmed_at, COALESCE to created_at for
+-- legacy rows). chain is surfaced so amounts render in the right token.
+CREATE VIEW public.qr_seller_transactions
+WITH (security_invoker = true) AS
+  SELECT
+    t.id,
+    t.offer_id,
+    o.name           AS offer_name,
+    t.buyer_wallet,
+    t.tx_signature,
+    t.seller_amount,
+    t.fee_amount,
+    t.quantity,
+    t.created_at,
+    'buy'::text      AS source,
+    o.seller_wallet,
+    o.chain
+  FROM public.qr_transactions t
+  JOIN public.qr_offers o ON o.id = t.offer_id
+  UNION ALL
+  SELECT
+    c.id,
+    c.offer_id,
+    o.name                                 AS offer_name,
+    c.buyer_wallet,
+    c.tx_signature,
+    c.seller_amount,
+    c.fee_amount,
+    c.quantity,
+    COALESCE(c.confirmed_at, c.created_at) AS created_at,
+    'counter_offer'::text                  AS source,
+    o.seller_wallet,
+    o.chain
+  FROM public.qr_counteroffers c
+  JOIN public.qr_offers o ON o.id = c.offer_id
+  WHERE c.status = 'confirmed';
+
+REVOKE ALL ON public.qr_seller_transactions FROM anon;
+GRANT SELECT ON public.qr_seller_transactions TO authenticated;
 
 -- ─── Helper functions ────────────────────────────────────────────────────────
 -- Called only by the backend (service role) from the webhooks. SECURITY DEFINER
@@ -302,6 +392,24 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION public.increment_offer_quantity_sold_by(uuid, integer) FROM PUBLIC, anon, authenticated;
 GRANT  EXECUTE ON FUNCTION public.increment_offer_quantity_sold_by(uuid, integer) TO service_role;
+
+-- ─── Sui indexer internal tables: lock down RLS ───────────────────────────────
+-- The Rust Sui event indexer creates two of its own tables in the public schema
+-- (watermarks — checkpoint cursor; __diesel_schema_migrations — Diesel
+-- bookkeeping). Both are written ONLY by the indexer (service-role key, bypasses
+-- RLS). Enable RLS with NO policies so the anon/authenticated browser keys can't
+-- reach them and the "RLS disabled in public" linter warning clears; deny-all is
+-- the goal. They're created by the indexer, not this repo, so on a fresh reset
+-- they won't exist — guard each ALTER so the reset doesn't fail.
+DO $$
+BEGIN
+  IF to_regclass('public.watermarks') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.watermarks ENABLE ROW LEVEL SECURITY';
+  END IF;
+  IF to_regclass('public.__diesel_schema_migrations') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.__diesel_schema_migrations ENABLE ROW LEVEL SECURITY';
+  END IF;
+END $$;
 
 -- ─── Seed ────────────────────────────────────────────────────────────────────
 INSERT INTO products (id, name, description, image_url, fee_bps)
