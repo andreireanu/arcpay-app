@@ -1452,34 +1452,45 @@
 .selectionSummary {
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 16px;
     background: #0d1f14;
     border: 1px solid #00b54b33;
     border-radius: 24px;
-    padding: 20px 28px;
+    /* Match the rows' horizontal padding (24px) so the banner's left/right edges
+       line up with the columns + controls beneath it. */
+    padding: 18px 24px;
+    /* On a narrow viewport the actions drop below the stats instead of
+       overflowing the card. */
+    flex-wrap: wrap;
 }
 
 .selectionSummaryStats {
-    flex: 1;
-    min-width: 0;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 24px;
+    /* Match the rows' inter-column gap so the stats sit on the same grid. */
+    gap: 16px;
+}
+
+/* Spacer matching .coListName, so on the dashboard (where each row leads with an
+   offer-name column) the stats shift right to stay aligned with the columns. */
+.selectionSummaryNameSpacer {
+    flex: 1 1 auto;
+    min-width: 170px;
 }
 
 .selectionSummaryItem {
-    flex: 1;
+    /* Same fixed width as .coListCol so each stat lines up over a data column. */
+    flex: 0 0 132px;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     gap: 2px;
 }
 
 .selectionSummaryItemFirst {
-    /* Keep the content centered within the column, but nudge it left of the
-       column's true center so it doesn't read as floating in empty space. */
-    padding-right: 64px;
+    /* No nudge needed now that items align to the column grid. */
 }
 
 .selectionSummarySep {
@@ -1514,6 +1525,8 @@
     display: flex;
     gap: 8px;
     flex-shrink: 0;
+    /* Pin to the right edge so the buttons line up with each row's controls. */
+    margin-left: auto;
 }
 
 .summaryHideButton,
@@ -1546,6 +1559,37 @@
 .summaryAcceptButton:disabled {
     opacity: 0.35;
     cursor: default;
+}
+
+/* Squeeze the summary into a still-usable form on narrow viewports: tighter
+   spacing, smaller numbers, and buttons that shrink instead of forcing overflow. */
+@media (max-width: 860px) {
+    .selectionSummary {
+        gap: 12px;
+        padding: 14px 16px;
+    }
+
+    .selectionSummaryStats {
+        gap: 16px;
+    }
+
+    /* Drop the fixed column width so the stats pack to content and stay visible
+       (column alignment is a wide-viewport nicety). */
+    .selectionSummaryItem {
+        flex: 0 0 auto;
+    }
+
+    .selectionSummaryValue {
+        font-size: 15px;
+        line-height: 22px;
+    }
+
+    .summaryHideButton,
+    .summaryAcceptButton {
+        min-width: 0;
+        padding: 8px 14px;
+        font-size: 13px;
+    }
 }
 
 .summaryHideButton:not(:disabled):hover,

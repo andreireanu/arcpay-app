@@ -19,6 +19,10 @@ function shortWallet(addr: string) {
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`
 }
 
+function currencyOf(tx: Transaction) {
+  return tx.chain === 'sui' ? 'SUI' : 'SOL'
+}
+
 export default function TransactionsList({ transactions, loading }: TransactionsListProps) {
   return (
     <div className={s.coList}>
@@ -46,11 +50,11 @@ export default function TransactionsList({ transactions, loading }: Transactions
             <div className={s.coListCol}>
               <span className={s.coListLabel}>Fee</span>
               <span className={s.coListValue}>
-                {tx.fee_amount > 0 ? `${(tx.fee_amount / 1e9).toFixed(4)} SOL` : '—'}
+                {tx.fee_amount > 0 ? `${(tx.fee_amount / 1e9).toFixed(4)} ${currencyOf(tx)}` : '—'}
               </span>
             </div>
             <span className={s.coListValueBold}>
-              {(tx.seller_amount / 1e9).toFixed(4)} SOL
+              {(tx.seller_amount / 1e9).toFixed(4)} {currencyOf(tx)}
             </span>
             <div className={s.coListSourceSlot}>
               <span

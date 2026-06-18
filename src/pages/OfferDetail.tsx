@@ -18,12 +18,19 @@ import {
   watchNewCounterOffers,
 } from "../supabase/offers/getCounterOffers";
 import {
+  getTransactionsBySeller,
+  watchNewTransactions,
+  watchSettledCounterOffers,
+} from "../supabase/transactions/transactions";
+import {
   acceptCounterOffers,
   cancelOfferAsSeller,
 } from "../dispatcher/actions";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
+import type { Transaction } from "../types/transaction";
 import CounterOffersList from "../components/CounterOffersList";
+import TransactionsList from "../components/TransactionsList";
 import SolIcon from "../assets/icons/SolIcon";
 import SuiIcon from "../assets/icons/SuiIcon";
 import DownloadIcon from "../assets/icons/DownloadIcon";
@@ -43,6 +50,11 @@ export default function OfferDetail() {
   const [toggling, setToggling] = useState(false);
   const [counterOffers, setCounterOffers] = useState<CounterOffer[]>([]);
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<"counteroffers" | "transactions">(
+    "counteroffers",
+  );
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [txLoaded, setTxLoaded] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelCountdown, setCancelCountdown] = useState(10);
@@ -98,6 +110,44 @@ export default function OfferDetail() {
       setCounterOffers((prev) => [counterOffer, ...prev]);
     });
   }, [offerId]);
+
+  // Lazy-load this offer's transactions when the tab is first opened.
+  useEffect(() => {
+    if (activeTab !== "transactions" || txLoaded || !primaryWallet?.address || !offerId)
+      return;
+    getTransactionsBySeller(primaryWallet.address, 0, 50, offerId)
+      .then(({ transactions }) => {
+        setTransactions(transactions);
+        setTxLoaded(true);
+      })
+      .catch(console.error);
+  }, [activeTab, txLoaded, primaryWallet?.address, offerId]);
+
+  // Live-append new direct buys and counter offers as they settle.
+  useEffect(() => {
+    if (!offerId) return;
+    return watchNewTransactions(offerId, (row) => {
+      setTransactions((prev) =>
+        prev.some((t) => t.id === row.id)
+          ? prev
+          : [{ ...row, offer_name: offer?.name ?? "", source: "buy" as const }, ...prev],
+      );
+    });
+  }, [offerId, offer?.name]);
+
+  useEffect(() => {
+    if (!offerId) return;
+    return watchSettledCounterOffers(offerId, (row) => {
+      setTransactions((prev) =>
+        prev.some((t) => t.id === row.id)
+          ? prev
+          : [
+              { ...row, offer_name: offer?.name ?? "", source: "counter_offer" as const },
+              ...prev,
+            ],
+      );
+    });
+  }, [offerId, offer?.name]);
 
   async function handlePause() {
     if (!offer) return;
@@ -395,29 +445,49 @@ export default function OfferDetail() {
           </div>
         </div>
 
-        {(counterOffers.length > 0 || hiddenIds.length > 0) && (
-          <div className={s.offersSection}>
-            <section className={s.counterOffersSection}>
-              <div className={s.counterOffersHeader}>
-                <h2 className={s.counterOffersTitle}>Counter offers</h2>
-                {hiddenIds.length > 0 && (
-                  <button
-                    className={s.unhideAllBtn}
-                    onClick={handleShowHidden}
-                  >
-                    Show hidden ({hiddenIds.length})
-                  </button>
+        <section className={s.bottomPanel}>
+          <div className={s.tabsRow}>
+            <div className={s.tabGroup}>
+              <button
+                className={`${s.tabBtn} ${activeTab === "counteroffers" ? s.tabBtnActive : ""}`}
+                onClick={() => setActiveTab("counteroffers")}
+              >
+                {counterOffers.length > 0 && (
+                  <span className={s.tabBadge}>{counterOffers.length}</span>
                 )}
-              </div>
+                Active offers
+              </button>
+              <button
+                className={`${s.tabBtn} ${activeTab === "transactions" ? s.tabBtnActive : ""}`}
+                onClick={() => setActiveTab("transactions")}
+              >
+                Transactions
+              </button>
+            </div>
+            {activeTab === "counteroffers" && hiddenIds.length > 0 && (
+              <button className={s.unhideAllBtn} onClick={handleShowHidden}>
+                Show hidden ({hiddenIds.length})
+              </button>
+            )}
+          </div>
+
+          {activeTab === "counteroffers" &&
+            (counterOffers.length === 0 ? (
+              <p className={s.offersEmpty}>No active counter offers.</p>
+            ) : (
               <CounterOffersList
                 counterOffers={counterOffers}
                 accepting={accepting}
                 onAccept={handleAccept}
                 onHide={handleHide}
+                offerNameFor={() => offer.name}
               />
-            </section>
-          </div>
-        )}
+            ))}
+
+          {activeTab === "transactions" && (
+            <TransactionsList transactions={transactions} loading={!txLoaded} />
+          )}
+        </section>
       </main>
     </div>
 

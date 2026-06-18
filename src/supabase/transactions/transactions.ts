@@ -16,14 +16,18 @@ export async function getTransactionsBySeller(
   sellerWallet: string,
   page = 0,
   pageSize = 10,
+  offerId?: string,
 ): Promise<TransactionPage> {
   const from = page * pageSize
   const to = from + pageSize - 1
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('qr_seller_transactions')
     .select('*', { count: 'exact' })
     .eq('seller_wallet', sellerWallet)
+  if (offerId) query = query.eq('offer_id', offerId)
+
+  const { data, error, count } = await query
     .order('created_at', { ascending: false })
     .range(from, to)
 
