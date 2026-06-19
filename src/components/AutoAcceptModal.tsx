@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { AutoAccept } from "../types/autoAccept";
 import CloseIcon from "../assets/icons/CloseIcon";
 import s from "../styles/dashboard.module.css";
@@ -44,8 +45,8 @@ export default function AutoAcceptModal({
     onSave(parseInt(quantity), Math.round(parseFloat(price) * 1_000_000_000));
   }
 
-  return (
-    <div className={s.modalOverlay}>
+  return createPortal(
+    <div className={s.modalOverlay} onClick={(e) => e.stopPropagation()}>
       <div className={s.modal}>
         <div className={s.modalHeader}>
           <h2 className={s.modalTitle}>Auto accept</h2>
@@ -133,6 +134,7 @@ export default function AutoAcceptModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

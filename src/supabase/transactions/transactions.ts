@@ -113,12 +113,14 @@ export function watchBuyerTransactions(
 }
 
 // Watch for counter offers settling on a given offer (status flips to
-// `confirmed` when the settle webhook processes the OfferBought event). These
-// become rows in the seller's transactions list, mirroring watchNewTransactions
-// for buys. RLS scopes delivery to the seller's own offers.
+// `confirmed` — or `auto_confirmed` when the auto-accept rule settled it — once
+// the settle webhook processes the OfferBought event). These become rows in the
+// seller's transactions list, mirroring watchNewTransactions for buys. RLS
+// scopes delivery to the seller's own offers. The `source` is derived from the
+// status so callers don't hardcode it (matches the qr_seller_transactions view).
 export function watchSettledCounterOffers(
   offerId: string,
-  onSettled: (row: TransactionRow) => void,
+  onSettled: (row: TransactionRow & { source: 'counter_offer' | 'auto_confirmed' }) => void,
 ): () => void {
   const channel = supabase
     .channel(`counter-offer-settled-${offerId}`)
@@ -130,11 +132,12 @@ export function watchSettledCounterOffers(
           status: string
           confirmed_at: string | null
         }
-        if (row.status !== 'confirmed') return
+        if (row.status !== 'confirmed' && row.status !== 'auto_confirmed') return
+        const source = row.status === 'auto_confirmed' ? 'auto_confirmed' : 'counter_offer'
         // For a counter offer the execution time is confirmed_at (when this
         // settle flipped it), not created_at (when the buyer placed it). Mirror
         // the qr_seller_transactions view so live rows match a reload.
-        onSettled({ ...row, created_at: row.confirmed_at ?? row.created_at })
+        onSettled({ ...row, source, created_at: row.confirmed_at ?? row.created_at })
       },
     )
     .subscribe()

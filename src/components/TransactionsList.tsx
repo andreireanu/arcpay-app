@@ -59,10 +59,18 @@ export default function TransactionsList({ transactions, loading }: Transactions
             <div className={s.coListSourceSlot}>
               <span
                 className={`${s.coListSourceBadge} ${
-                  tx.source === 'buy' ? s.coListSourceBuy : s.coListSourceCounter
+                  tx.source === 'buy'
+                    ? s.coListSourceBuy
+                    : tx.source === 'auto_confirmed'
+                      ? s.coListSourceAuto
+                      : s.coListSourceCounter
                 }`}
               >
-                {tx.source === 'buy' ? 'direct buy' : 'offer'}
+                {tx.source === 'buy'
+                  ? 'direct buy'
+                  : tx.source === 'auto_confirmed'
+                    ? 'auto offer'
+                    : 'offer'}
               </span>
             </div>
             <div className={s.coListStatusSlot}>

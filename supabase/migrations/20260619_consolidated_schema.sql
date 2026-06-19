@@ -372,8 +372,10 @@ CREATE POLICY "sellers manage own auto-accept"
 
 -- ─── qr_seller_transactions (view) ───────────────────────────────────────────
 -- The seller's transaction history is a UNION of two sources: direct buys
--- (qr_transactions) and confirmed counter offers (qr_counteroffers WHERE
--- status = 'confirmed'), exposed as one ordered, paginatable stream.
+-- (qr_transactions) and settled counter offers (qr_counteroffers WHERE status
+-- IN ('confirmed','auto_confirmed')), exposed as one ordered, paginatable
+-- stream. The counter-offer source is tagged 'auto_confirmed' when the
+-- auto-accept rule settled it, else 'counter_offer'.
 --
 -- security_invoker = true → the view runs with the caller's privileges, so RLS on
 -- the underlying tables scopes rows per role. It is read from BOTH sides (a seller
@@ -410,12 +412,13 @@ WITH (security_invoker = true) AS
     c.fee_amount,
     c.quantity,
     COALESCE(c.confirmed_at, c.created_at) AS created_at,
-    'counter_offer'::text                  AS source,
+    CASE WHEN c.status = 'auto_confirmed' THEN 'auto_confirmed'
+         ELSE 'counter_offer' END          AS source,
     o.seller_wallet,
     o.chain
   FROM public.qr_counteroffers c
   JOIN public.qr_offers o ON o.id = c.offer_id
-  WHERE c.status = 'confirmed';
+  WHERE c.status IN ('confirmed', 'auto_confirmed');
 
 REVOKE ALL ON public.qr_seller_transactions FROM anon;
 GRANT SELECT ON public.qr_seller_transactions TO authenticated;

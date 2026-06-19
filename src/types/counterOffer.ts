@@ -10,6 +10,7 @@ export interface CounterOffer {
   status:
     | "active"
     | "confirmed"
+    | "auto_confirmed"
     | "buyer_canceled"
     | "seller_canceled";
   created_at: string;

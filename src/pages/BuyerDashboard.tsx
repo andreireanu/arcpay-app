@@ -124,7 +124,7 @@ export default function BuyerDashboard() {
     return watchCounterOfferStatuses(coIdKey.split(','), (id, status) => {
       if (status === 'active') return
       setCounterOffers((prev) => prev.filter((co) => co.id !== id))
-      if (status === 'confirmed') {
+      if (status === 'confirmed' || status === 'auto_confirmed') {
         if (walletAddress) getItemsBought(walletAddress).then(setItems).catch(console.error)
         setTxLoaded(false)
       }

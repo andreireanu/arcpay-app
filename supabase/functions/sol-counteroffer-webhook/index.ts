@@ -182,6 +182,7 @@ async function runAutoAccept(
       sellerWallet: decision.sellerWallet,
       toSeller: true,
       feeAmount: co.fee_amount,
+      auto: true,
     })),
   );
 

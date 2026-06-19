@@ -152,6 +152,10 @@
         {
           "name": "fee_amount",
           "type": "u64"
+        },
+        {
+          "name": "auto",
+          "type": "bool"
         }
       ]
     },
@@ -318,6 +322,19 @@
               }
             ]
           }
+        },
+        {
+          "name": "program",
+          "docs": [
+            "This program's account, verified to point at `program_data`. Together",
+            "with the constraint below it restricts initialization to the program's",
+            "upgrade authority (the deployer), closing the deploy→init front-running",
+            "window where anyone could otherwise become admin."
+          ],
+          "address": "6KELPQtzV7uchqQC2xEAL7u2BR2Hh5cP57YYUgRpnsed"
+        },
+        {
+          "name": "program_data"
         },
         {
           "name": "system_program",
@@ -774,7 +791,10 @@
       "name": "OfferBought",
       "docs": [
         "Backend-driven settlement of an accepted offer: escrow paid out to the seller",
-        "(minus fee)."
+        "(minus fee).",
+        "",
+        "`auto` distinguishes how the settlement was triggered: `true` when the",
+        "backend's auto-accept rule fired, `false` when a seller manually accepted."
       ],
       "type": {
         "kind": "struct",
@@ -803,6 +823,10 @@
           {
             "name": "fee_amount",
             "type": "u64"
+          },
+          {
+            "name": "auto",
+            "type": "bool"
           },
           {
             "name": "timestamp",

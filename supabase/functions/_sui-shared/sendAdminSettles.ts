@@ -11,6 +11,8 @@ export interface SuiSettleItem {
   toSeller: boolean;
   /** MIST; the contract asserts this is 0 when toSeller is false */
   feeAmount: number;
+  /** true when settled by the auto-accept rule; emit-only on OfferBought (label). */
+  auto?: boolean;
 }
 
 export interface SuiSettleResult {
@@ -111,6 +113,7 @@ export async function sendAdminSettles(
             tx.object(item.objectId),
             tx.pure.bool(item.toSeller),
             tx.pure.u64(BigInt(item.feeAmount)),
+            tx.pure.bool(item.auto ?? false),
             clockArg,
           ],
         });

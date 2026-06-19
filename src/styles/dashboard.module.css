@@ -1365,6 +1365,11 @@
     color: #a78bfa;
 }
 
+.coListSourceAuto {
+    background: #07231c;
+    color: #34d399;
+}
+
 .statusConfirmed {
     background: #01230f;
     color: #00b54b;

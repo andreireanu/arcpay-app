@@ -76,13 +76,16 @@ async function handleBought(
   }
 
   const txDigest = typeof payload.tx_digest === "string" ? payload.tx_digest : "";
-  console.log("sui-refund-webhook offer_bought", ephemeralUuid, "digest", txDigest);
+  // The settling tx carries whether the auto-accept rule triggered it (vs a
+  // seller manual accept). Emit-only on chain; here it picks the final status.
+  const status = payload.auto === true ? "auto_confirmed" : "confirmed";
+  console.log("sui-refund-webhook offer_bought", ephemeralUuid, "digest", txDigest, "auto", payload.auto === true);
 
   // Conditional flip = exactly-once: a duplicate delivery matches 0 rows.
   const { data: settled, error } = await supabase
     .from("qr_counteroffers")
     .update({
-      status: "confirmed",
+      status,
       confirmed_at: new Date().toISOString(),
       returned: true,
       settle_tx_signature: txDigest,

@@ -24,5 +24,7 @@ export const config = {
     ),
     // Solana network transaction cost added to the total the buyer is charged.
     txCostLamports: Number(import.meta.env.VITE_TX_COST_LAMPORTS ?? 5_000),
+    // Sui network/gas cost added to the buyer's total (MIST).
+    suiTxCostMist: Number(import.meta.env.VITE_SUI_TX_COST_MIST ?? 2_197_000),
   },
 };

@@ -31,6 +31,8 @@ export interface OfferSettleItem {
   toSeller: boolean;
   /** lamports; must be 0 when toSeller is false (the program enforces it) */
   feeAmount: number;
+  /** true when settled by the auto-accept rule; emit-only on OfferBought (label). */
+  auto?: boolean;
 }
 
 export interface SettleResult {
@@ -116,12 +118,13 @@ export async function sendAdminSettles(
       tx.feePayer = backendKeypair.publicKey;
 
       for (const item of batch) {
-        // admin_settle_offer(uuid: [u8;16], to_seller: bool, fee_amount: u64)
-        const data = new Uint8Array(8 + 16 + 1 + 8);
+        // admin_settle_offer(uuid: [u8;16], to_seller: bool, fee_amount: u64, auto: bool)
+        const data = new Uint8Array(8 + 16 + 1 + 8 + 1);
         data.set(disc, 0);
         data.set(uuidToBytes(item.ephemeralId), 8);
         data[24] = item.toSeller ? 1 : 0;
         new DataView(data.buffer).setBigUint64(25, BigInt(item.feeAmount), true);
+        data[33] = item.auto ? 1 : 0;
 
         tx.add(
           new TransactionInstruction({

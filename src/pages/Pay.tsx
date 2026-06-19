@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { useDynamicContext, getAuthToken } from "@dynamic-labs/sdk-react-core";
 import { isSolanaWallet } from "@dynamic-labs/solana-core";
@@ -21,10 +21,12 @@ import {
 import type { Offer } from "../types/offer";
 import { config } from "../config/env";
 import InfoIcon from "../assets/icons/InfoIcon";
+import HomeIcon from "../assets/icons/HomeIcon";
 import s from "../styles/pay.module.css";
 
 const RETURNABLE_FEE_LAMPORTS = config.arcPay.returnableFeeLamports;
 const TX_COST_LAMPORTS = config.arcPay.txCostLamports;
+const SUI_TX_COST_MIST = config.arcPay.suiTxCostMist;
 
 function formatSol(lamports: number): string {
   return (lamports / 1_000_000_000).toLocaleString("en-US", {
@@ -48,6 +50,7 @@ export default function Pay() {
   const [counterOfferLoading, setCounterOfferLoading] = useState(false);
 
   const { connection } = useConnection();
+  const navigate = useNavigate();
   const { primaryWallet, setShowAuthFlow, user } = useDynamicContext();
   // The buyer must be connected on the offer's chain: a Sui offer needs a Sui
   // wallet, a Solana offer a Solana wallet. (Defaults to Solana until the offer
@@ -90,6 +93,7 @@ export default function Pay() {
     return watchCounterOfferStatuses([activeCounterOffer.id], (_id, status) => {
       if (
         status === "confirmed" ||
+        status === "auto_confirmed" ||
         status === "buyer_canceled" ||
         status === "seller_canceled"
       )
@@ -230,16 +234,22 @@ export default function Pay() {
   const feesAppliedLamports = Math.floor(
     (offeredLamports * offer.fee_bps) / 10000,
   );
-  // The returnable fee is Solana Offer-PDA rent; Sui has no equivalent buyer deposit.
-  const totalChargedLamports =
-    offeredLamports +
-    (isSui ? 0 : RETURNABLE_FEE_LAMPORTS) +
-    TX_COST_LAMPORTS;
+  const totalChargedLamports = isSui
+    ? offeredLamports + SUI_TX_COST_MIST
+    : offeredLamports + RETURNABLE_FEE_LAMPORTS + TX_COST_LAMPORTS;
 
   return (
     <>
       <div className={s.page}>
         <div className={s.card}>
+          <button
+            type="button"
+            className={s.homeButton}
+            onClick={() => navigate("/buyer")}
+            aria-label="Go to dashboard"
+          >
+            <HomeIcon size={18} />
+          </button>
           <div className={s.logoWrap}>
             <img src="/favicon.svg" alt="ArcPay" className={s.logo} />
           </div>

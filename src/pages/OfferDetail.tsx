@@ -90,7 +90,12 @@ export default function OfferDetail() {
     const ids = counterOfferIdKey ? counterOfferIdKey.split(",") : [];
     if (ids.length === 0) return;
     return watchCounterOfferStatuses(ids, (id, status) => {
-      if (status === "buyer_canceled" || status === "seller_canceled") {
+      if (
+        status === "confirmed" ||
+        status === "auto_confirmed" ||
+        status === "buyer_canceled" ||
+        status === "seller_canceled"
+      ) {
         setCounterOffers((prev) => prev.filter((co) => co.id !== id));
       } else {
         setCounterOffers((prev) =>
@@ -145,7 +150,7 @@ export default function OfferDetail() {
         prev.some((t) => t.id === row.id)
           ? prev
           : [
-              { ...row, offer_name: offer?.name ?? "", source: "counter_offer" as const },
+              { ...row, offer_name: offer?.name ?? "" },
               ...prev,
             ],
       );

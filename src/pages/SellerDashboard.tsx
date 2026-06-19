@@ -89,7 +89,7 @@ export default function SellerDashboard() {
         setTransactions((prev) => {
           if (prev.some((t) => t.id === row.id)) return prev
           const offer_name = offers.find((of) => of.id === row.offer_id)?.name ?? ''
-          return [{ ...row, offer_name, source: 'counter_offer' as const }, ...prev]
+          return [{ ...row, offer_name }, ...prev]
         })
       }),
     )
@@ -103,6 +103,7 @@ export default function SellerDashboard() {
     return watchCounterOfferStatuses(ids, (id, status) => {
       if (
         status === 'confirmed' ||
+        status === 'auto_confirmed' ||
         status === 'buyer_canceled' ||
         status === 'seller_canceled'
       ) {

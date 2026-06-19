@@ -58,16 +58,21 @@ Deno.serve(async (req) => {
       if (bytes.length < 8) continue;
       const disc = bytes.slice(0, 8);
 
-      // OfferBought: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 seller_amount + 8 fee_amount + 8 timestamp = 112 bytes
+      // OfferBought: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 seller_amount + 8 fee_amount + 8 timestamp + 1 auto = 113 bytes
       if (bytes.length >= 112 && arraysEqual(disc, boughtDisc)) {
         const ephemeralUuid = bytesToUuid(bytes.slice(8, 24));
-        console.log("offer_bought event", ephemeralUuid);
+        // The settling tx carries whether the auto-accept rule triggered it (vs
+        // a seller manual accept). Emit-only on chain; here it picks the final
+        // status. Trailing byte at offset 112; default false for legacy events.
+        const auto = bytes.length >= 113 ? bytes[112] === 1 : false;
+        const status = auto ? "auto_confirmed" : "confirmed";
+        console.log("offer_bought event", ephemeralUuid, "auto", auto);
 
         // Conditional flip = exactly-once: a duplicate delivery matches 0 rows.
         const { data: settled, error } = await supabase
           .from("qr_counteroffers")
           .update({
-            status: "confirmed",
+            status,
             confirmed_at: new Date().toISOString(),
             returned: true,
             settle_tx_signature: txSignature,

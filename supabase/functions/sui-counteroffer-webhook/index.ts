@@ -177,6 +177,7 @@ async function runAutoAccept(
       objectId: co.sui_object_id!,
       toSeller: true,
       feeAmount: co.fee_amount,
+      auto: true,
     }));
   if (items.length === 0) return;
 
