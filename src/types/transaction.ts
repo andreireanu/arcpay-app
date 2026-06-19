@@ -9,5 +9,6 @@ export interface Transaction {
   quantity: number;
   created_at: string;
   source: "buy" | "counter_offer" | "auto_confirmed";
+  status: "confirmed" | "auto_confirmed" | "buyer_canceled" | "seller_canceled";
   chain: "sui" | "solana";
 }

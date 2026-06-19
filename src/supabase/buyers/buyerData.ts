@@ -14,6 +14,8 @@ export async function getItemsBought(buyerWallet: string): Promise<Offer[]> {
     .from('qr_seller_transactions')
     .select('offer_id, created_at')
     .eq('buyer_wallet', buyerWallet)
+    // Only real purchases count as "bought" — exclude canceled offer history.
+    .in('status', ['confirmed', 'auto_confirmed'])
     .order('created_at', { ascending: false })
   if (error) throw error
 

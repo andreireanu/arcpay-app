@@ -371,11 +371,13 @@ CREATE POLICY "sellers manage own auto-accept"
   );
 
 -- ─── qr_seller_transactions (view) ───────────────────────────────────────────
--- The seller's transaction history is a UNION of two sources: direct buys
--- (qr_transactions) and settled counter offers (qr_counteroffers WHERE status
--- IN ('confirmed','auto_confirmed')), exposed as one ordered, paginatable
--- stream. The counter-offer source is tagged 'auto_confirmed' when the
--- auto-accept rule settled it, else 'counter_offer'.
+-- A UNION of direct buys (qr_transactions) and counter offers
+-- (qr_counteroffers), exposed as one ordered, paginatable stream. `status` is
+-- surfaced so callers scope it: sellers and items-bought filter to settled rows
+-- ('confirmed','auto_confirmed'), while the buyer history also keeps the
+-- canceled rows ('buyer_canceled','seller_canceled') so a buyer sees what
+-- happened to their offers. The counter-offer source is tagged 'auto_confirmed'
+-- when the auto-accept rule settled it, else 'counter_offer'.
 --
 -- security_invoker = true → the view runs with the caller's privileges, so RLS on
 -- the underlying tables scopes rows per role. It is read from BOTH sides (a seller
@@ -398,7 +400,8 @@ WITH (security_invoker = true) AS
     t.created_at,
     'buy'::text      AS source,
     o.seller_wallet,
-    o.chain
+    o.chain,
+    'confirmed'::text AS status
   FROM public.qr_transactions t
   JOIN public.qr_offers o ON o.id = t.offer_id
   UNION ALL
@@ -415,10 +418,11 @@ WITH (security_invoker = true) AS
     CASE WHEN c.status = 'auto_confirmed' THEN 'auto_confirmed'
          ELSE 'counter_offer' END          AS source,
     o.seller_wallet,
-    o.chain
+    o.chain,
+    c.status                               AS status
   FROM public.qr_counteroffers c
   JOIN public.qr_offers o ON o.id = c.offer_id
-  WHERE c.status IN ('confirmed', 'auto_confirmed');
+  WHERE c.status IN ('confirmed', 'auto_confirmed', 'buyer_canceled', 'seller_canceled');
 
 REVOKE ALL ON public.qr_seller_transactions FROM anon;
 GRANT SELECT ON public.qr_seller_transactions TO authenticated;

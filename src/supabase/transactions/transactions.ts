@@ -25,6 +25,8 @@ export async function getTransactionsBySeller(
     .from('qr_seller_transactions')
     .select('*', { count: 'exact' })
     .eq('seller_wallet', sellerWallet)
+    // Sellers see only settled rows; canceled offers are buyer-side history.
+    .in('status', ['confirmed', 'auto_confirmed'])
   if (offerId) query = query.eq('offer_id', offerId)
 
   const { data, error, count } = await query
@@ -59,6 +61,8 @@ export async function getTransactionsByBuyer(
     .from('qr_seller_transactions')
     .select('*', { count: 'exact' })
     .eq('buyer_wallet', buyerWallet)
+    // Purchases only; canceled offers live in the buyer's "Past offers" tab.
+    .in('status', ['confirmed', 'auto_confirmed'])
   if (offerId) query = query.eq('offer_id', offerId)
 
   const { data, error, count } = await query
@@ -71,6 +75,24 @@ export async function getTransactionsByBuyer(
     transactions: (data ?? []) as unknown as Transaction[],
     total: count ?? 0,
   }
+}
+
+// The buyer's canceled counter offers (their "Past offers" tab) — offers that
+// ended without a purchase, by either party. Reads the same view filtered to the
+// canceled statuses, scoped to buyer_wallet for the same reason as above.
+export async function getCanceledOffersByBuyer(
+  buyerWallet: string,
+): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('qr_seller_transactions')
+    .select('*')
+    .eq('buyer_wallet', buyerWallet)
+    .in('status', ['buyer_canceled', 'seller_canceled'])
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error) throw error
+  return (data ?? []) as unknown as Transaction[]
 }
 
 // Raw qr_transactions row as delivered by Realtime (no qr_offers join, no source

@@ -23,6 +23,12 @@ function currencyOf(tx: Transaction) {
   return tx.chain === 'sui' ? 'SUI' : 'SOL'
 }
 
+function statusOf(tx: Transaction): { label: string; canceled: boolean } {
+  if (tx.status === 'seller_canceled') return { label: 'seller canceled', canceled: true }
+  if (tx.status === 'buyer_canceled') return { label: 'canceled', canceled: true }
+  return { label: 'confirmed', canceled: false }
+}
+
 export default function TransactionsList({ transactions, loading }: TransactionsListProps) {
   return (
     <div className={s.coList}>
@@ -74,7 +80,14 @@ export default function TransactionsList({ transactions, loading }: Transactions
               </span>
             </div>
             <div className={s.coListStatusSlot}>
-              <span className={`${s.statusBadge} ${s.statusConfirmed}`}>confirmed</span>
+              {(() => {
+                const st = statusOf(tx)
+                return (
+                  <span className={`${s.statusBadge} ${st.canceled ? s.statusCanceled : s.statusConfirmed}`}>
+                    {st.label}
+                  </span>
+                )
+              })()}
             </div>
           </div>
         ))

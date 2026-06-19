@@ -10,6 +10,7 @@ import { getOffersByIds } from '../supabase/offers/offers'
 import { watchCounterOfferStatuses } from '../supabase/offers/getCounterOffers'
 import {
   getTransactionsByBuyer,
+  getCanceledOffersByBuyer,
   watchBuyerTransactions,
 } from '../supabase/transactions/transactions'
 import { cancelCounterOfferAction } from '../dispatcher/actions'
@@ -34,10 +35,12 @@ export default function BuyerDashboard() {
   // offer_id). Set from the async fetch below; merged with item names via memo.
   const [coOfferNames, setCoOfferNames] = useState<Record<string, string>>({})
 
-  const [activeTab, setActiveTab] = useState<'active' | 'transactions'>('active')
+  const [activeTab, setActiveTab] = useState<'active' | 'transactions' | 'past'>('active')
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [txTotal, setTxTotal] = useState(0)
   const [txLoaded, setTxLoaded] = useState(false)
+  const [pastOffers, setPastOffers] = useState<Transaction[]>([])
+  const [pastLoaded, setPastLoaded] = useState(false)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
   // When set, both tabs are filtered to a single bought item (clicked above).
   const [focusedOfferId, setFocusedOfferId] = useState<string | null>(null)
@@ -116,6 +119,14 @@ export default function BuyerDashboard() {
     })
   }, [walletAddress])
 
+  // Past offers (canceled by either party). Loaded lazily when the tab opens.
+  useEffect(() => {
+    if (activeTab !== 'past' || pastLoaded || !walletAddress) return
+    getCanceledOffersByBuyer(walletAddress)
+      .then((rows) => { setPastOffers(rows); setPastLoaded(true) })
+      .catch(console.error)
+  }, [activeTab, pastLoaded, walletAddress])
+
   // Live: one of the buyer's counter offers gets confirmed (becomes a purchase)
   // or canceled — drop it from Active and refresh the purchase-derived views.
   const coIdKey = counterOffers.map((co) => co.id).join(',')
@@ -127,6 +138,9 @@ export default function BuyerDashboard() {
       if (status === 'confirmed' || status === 'auto_confirmed') {
         if (walletAddress) getItemsBought(walletAddress).then(setItems).catch(console.error)
         setTxLoaded(false)
+      } else {
+        // buyer_canceled / seller_canceled → refetch Past offers next open.
+        setPastLoaded(false)
       }
     })
   }, [coIdKey, walletAddress])
@@ -155,6 +169,9 @@ export default function BuyerDashboard() {
   const shownCounterOffers = focusedOfferId
     ? counterOffers.filter((co) => co.offer_id === focusedOfferId)
     : counterOffers
+  const shownPastOffers = focusedOfferId
+    ? pastOffers.filter((t) => t.offer_id === focusedOfferId)
+    : pastOffers
   const focusedName = focusedOfferId ? offerNames[focusedOfferId] ?? '' : ''
 
   return (
@@ -191,6 +208,12 @@ export default function BuyerDashboard() {
                 onClick={() => setActiveTab('transactions')}
               >
                 Transactions
+              </button>
+              <button
+                className={`${s.tabBtn} ${activeTab === 'past' ? s.tabBtnActive : ''}`}
+                onClick={() => setActiveTab('past')}
+              >
+                Past offers
               </button>
             </div>
             {focusedOfferId && (
@@ -238,6 +261,14 @@ export default function BuyerDashboard() {
                 </div>
               )}
             </>
+          )}
+
+          {activeTab === 'past' && (
+            shownPastOffers.length === 0 && pastLoaded ? (
+              <p className={s.offersEmpty}>No past offers.</p>
+            ) : (
+              <TransactionsList transactions={shownPastOffers} loading={!pastLoaded} />
+            )
           )}
         </section>
       </main>

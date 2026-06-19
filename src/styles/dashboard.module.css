@@ -1366,13 +1366,18 @@
 }
 
 .coListSourceAuto {
-    background: #07231c;
-    color: #34d399;
+    background: #06262e;
+    color: #22d3ee;
 }
 
 .statusConfirmed {
     background: #01230f;
     color: #00b54b;
+}
+
+.statusCanceled {
+    background: #2a0f0f;
+    color: #f87171;
 }
 
 .coListActions {
