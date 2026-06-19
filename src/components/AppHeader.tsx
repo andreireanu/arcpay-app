@@ -8,14 +8,15 @@ import {
 } from '@dynamic-labs/sdk-react-core'
 import { isSolanaWallet } from '@dynamic-labs/solana-core'
 import { isSuiWallet } from '@dynamic-labs/sui-core'
+import { isEmbeddedConnector } from '@dynamic-labs/wallet-connector-core'
 import { useAuth } from '../hooks/useAuth'
 import { getCurrentRole } from '../supabase/auth/auth'
 import { exchangeToken } from '../supabase/auth/exchangeToken'
 import StoreIcon from '../assets/icons/StoreIcon'
 import LinkIcon from '../assets/icons/LinkIcon'
 import TransactionsIcon from '../assets/icons/TransactionsIcon'
-import suiWordmark from '../assets/sui.svg'
-import solanaWordmark from '../assets/solana.svg'
+import SuiIcon from '../assets/icons/SuiIcon'
+import SolIcon from '../assets/icons/SolIcon'
 import s from '../styles/dashboard.module.css'
 
 type ConnectedWallet = ReturnType<typeof useUserWallets>[number]
@@ -33,21 +34,11 @@ function shorten(address: string): string {
   return `${address.slice(0, 4)}...${address.slice(-4)}`
 }
 
-// The chain's brand wordmark for a connected wallet, used as the marker to the
-// left of the wallet address.
+// The chain's teardrop/mark for a connected wallet, used as the marker to the
+// left of the wallet address. A bit larger than the in-card icons.
 function ChainLogo({ wallet }: { wallet: ConnectedWallet }) {
-  if (isSuiWallet(wallet)) {
-    return (
-      <img
-        src={suiWordmark}
-        alt="Sui"
-        className={`${s.walletChainLogoImg} ${s.walletChainLogoSui}`}
-      />
-    )
-  }
-  if (isSolanaWallet(wallet)) {
-    return <img src={solanaWordmark} alt="Solana" className={s.walletChainLogoImg} />
-  }
+  if (isSuiWallet(wallet)) return <SuiIcon size={24} />
+  if (isSolanaWallet(wallet)) return <SolIcon size={24} />
   return null
 }
 
@@ -112,6 +103,16 @@ export default function AppHeader() {
   const activeChain = primaryWallet ? chainLabel(primaryWallet) : null
   const shortAddress = walletAddress ? shorten(walletAddress) : null
 
+  // Email (and social) logins use Dynamic embedded wallets — one per chain. We
+  // don't let those users hop chains from the header: the session is scoped to
+  // the chain chosen at login. External-wallet users keep the switcher.
+  const emailConnected = primaryWallet?.connector
+    ? isEmbeddedConnector(primaryWallet.connector)
+    : false
+  const walletRows = emailConnected
+    ? userWallets.filter((w) => w.id === primaryWallet?.id)
+    : userWallets
+
   return (
     <header className={s.header}>
       <div className={s.headerLeft}>
@@ -161,13 +162,13 @@ export default function AppHeader() {
             {walletMenuOpen && (
               <div className={s.walletDropdown}>
                 <span className={s.walletDropdownLabel}>Active wallet</span>
-                {userWallets.map((w) => {
+                {walletRows.map((w) => {
                   const active = w.id === primaryWallet?.id
                   return (
                     <div
                       key={w.id}
                       className={`${s.walletChainRow} ${active ? s.walletChainRowActive : ''}`}
-                      onClick={() => handleSelectWallet(w.id)}
+                      onClick={emailConnected ? undefined : () => handleSelectWallet(w.id)}
                     >
                       <div className={s.walletChainInfo}>
                         <span className={s.walletChainName}>

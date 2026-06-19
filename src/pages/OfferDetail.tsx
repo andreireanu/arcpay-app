@@ -31,6 +31,8 @@ import type { CounterOffer } from "../types/counterOffer";
 import type { Transaction } from "../types/transaction";
 import CounterOffersList from "../components/CounterOffersList";
 import TransactionsList from "../components/TransactionsList";
+import AutoAcceptButton from "../components/AutoAcceptButton";
+import AlertModal from "../components/AlertModal";
 import SolIcon from "../assets/icons/SolIcon";
 import SuiIcon from "../assets/icons/SuiIcon";
 import DownloadIcon from "../assets/icons/DownloadIcon";
@@ -56,6 +58,7 @@ export default function OfferDetail() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [txLoaded, setTxLoaded] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelCountdown, setCancelCountdown] = useState(10);
   const [canceling, setCanceling] = useState(false);
@@ -283,6 +286,9 @@ export default function OfferDetail() {
       await acceptCounterOffers(primaryWallet, connection, ids);
     } catch (err) {
       console.error("Accept counter offer failed", err);
+      setAcceptError(
+        err instanceof Error ? err.message : "Could not accept these offers.",
+      );
     } finally {
       acceptingRef.current = false;
       setAccepting(false);
@@ -381,9 +387,12 @@ export default function OfferDetail() {
             <div className={s.offerDetailContent}>
               <div className={s.offerDetailNameRow}>
                 <h1 className={s.offerDetailName}>{offer.name}</h1>
-                <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
-                  {offer.status}
-                </span>
+                <div className={s.offerDetailStatusGroup}>
+                  <AutoAcceptButton offer={offer} />
+                  <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
+                    {offer.status}
+                  </span>
+                </div>
               </div>
               {offer.description && (
                 <p className={s.offerDetailDescription}>{offer.description}</p>
@@ -490,6 +499,12 @@ export default function OfferDetail() {
         </section>
       </main>
     </div>
+
+    <AlertModal
+      message={acceptError}
+      onClose={() => setAcceptError(null)}
+      title="Can't accept"
+    />
 
     {cancelModalOpen && (
         <div className={s.modalOverlay} onClick={handleCancelDismiss}>

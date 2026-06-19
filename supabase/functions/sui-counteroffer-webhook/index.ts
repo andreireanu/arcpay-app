@@ -1,4 +1,15 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  makeSuiClient,
+  sendAdminSettles,
+  suiKeypairFromHex,
+  type SuiSettleItem,
+} from "../_sui-shared/sendAdminSettles.ts";
+import {
+  evaluateAutoAccept,
+  markAutoAcceptTriggered,
+} from "../_shared/autoAccept.ts";
 
 // Accepts a uuid as a uuid string, a 32-char hex string, or a 16-element byte
 // array, and normalizes to the canonical uuid stored in qr_ephemeral.id.
@@ -144,5 +155,65 @@ Deno.serve(async (req) => {
       ephemeral.offer_id,
     );
 
+  await runAutoAccept(supabase, ephemeral.offer_id);
+
   return new Response("ok", { status: 200 });
 });
+
+// Evaluate the seller's auto-accept rule for this offer and, if met, settle the
+// best counter offers to the seller via admin_settle_offer (to_seller=true) —
+// the same settle path the accept flow uses, just triggered by the stored rule
+// instead of an on-chain consent event.
+async function runAutoAccept(
+  supabase: SupabaseClient,
+  offerId: string,
+): Promise<void> {
+  const decision = await evaluateAutoAccept(supabase, offerId);
+  if (!decision) return;
+
+  const items: SuiSettleItem[] = decision.rows
+    .filter((co) => co.sui_object_id)
+    .map((co) => ({
+      objectId: co.sui_object_id!,
+      toSeller: true,
+      feeAmount: co.fee_amount,
+    }));
+  if (items.length === 0) return;
+
+  const packageId = Deno.env.get("SUI_PACKAGE_ID");
+  const configId = Deno.env.get("SUI_CONFIG_ID");
+  const keypairHex = Deno.env.get("SUI_BACKEND_KEYPAIR");
+  if (!packageId || !configId || !keypairHex) {
+    console.error(
+      "auto-accept: missing SUI_PACKAGE_ID / SUI_CONFIG_ID / SUI_BACKEND_KEYPAIR — skipped",
+      offerId,
+    );
+    return;
+  }
+
+  const client = makeSuiClient();
+  const keypair = suiKeypairFromHex(keypairHex);
+
+  const { digests, dropped, errors } = await sendAdminSettles(
+    client,
+    keypair,
+    packageId,
+    configId,
+    items,
+  );
+
+  if (digests.length) console.log("auto-accept settled", offerId, digests);
+  if (dropped.length)
+    console.warn(
+      "auto-accept objects already consumed, skipped",
+      offerId,
+      dropped.map((d) => d.objectId),
+    );
+  if (errors.length) {
+    // Leave the rule armed so the next counter offer re-runs the driver.
+    console.error("auto-accept errors", offerId, errors);
+    return;
+  }
+
+  await markAutoAcceptTriggered(supabase, offerId, decision.achievedAvg);
+}

@@ -157,7 +157,9 @@ Deno.serve(async (req) => {
   // split per offer.
   const { data: counterOffers, error: fetchError } = await supabase
     .from("qr_counteroffers")
-    .select("id, status, expiry_at, offer_id, qr_offers(seller_wallet, chain)")
+    .select(
+      "id, status, expiry_at, offer_id, qr_offers(seller_wallet, chain, name, unlimited, quantity, quantity_sold)",
+    )
     .in("id", counter_offer_ids);
 
   if (fetchError || !counterOffers) {
@@ -169,9 +171,22 @@ Deno.serve(async (req) => {
     return new Response("One or more counter offers not found", { status: 404, headers: CORS });
   }
 
+  type ParentOffer = {
+    seller_wallet: string;
+    chain: string;
+    name: string;
+    unlimited: boolean;
+    quantity: number;
+    quantity_sold: number;
+  };
+
   let chain = "solana";
+  // Tally how many offers are being accepted per parent listing. A batch can pool
+  // counter offers across multiple listings (dashboard "Accept all"), so stock is
+  // checked per listing. Each settle consumes one unit (quantity_sold += 1).
+  const perOffer = new Map<string, { name: string; remaining: number; count: number }>();
   for (const co of counterOffers) {
-    const offer = co.qr_offers as { seller_wallet: string; chain: string } | null;
+    const offer = co.qr_offers as ParentOffer | null;
     if (offer?.seller_wallet !== seller_wallet) {
       return new Response("Unauthorized: counter offer does not belong to this seller", { status: 403, headers: CORS });
     }
@@ -182,6 +197,27 @@ Deno.serve(async (req) => {
       return new Response(`Counter offer ${co.id} has expired`, { status: 400, headers: CORS });
     }
     chain = offer.chain;
+    if (!offer.unlimited) {
+      const entry = perOffer.get(co.offer_id) ?? {
+        name: offer.name,
+        remaining: offer.quantity - offer.quantity_sold,
+        count: 0,
+      };
+      entry.count += 1;
+      perOffer.set(co.offer_id, entry);
+    }
+  }
+
+  // Reject the whole batch if accepting would oversell any listing.
+  const overstock = [...perOffer.values()].filter((o) => o.count > o.remaining);
+  if (overstock.length > 0) {
+    const detail = overstock
+      .map((o) => `“${o.name}” — only ${Math.max(0, o.remaining)} left but ${o.count} selected`)
+      .join("; ");
+    return new Response(`Not enough stock for ${detail}.`, {
+      status: 409,
+      headers: CORS,
+    });
   }
 
   // Insert witness row — id is the ephemeral UUID passed to the program.

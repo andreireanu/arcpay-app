@@ -102,7 +102,6 @@ export default function CounterOffersList({
     <>
       {!buyerMode && (
       <div className={s.selectionSummary}>
-        {offerNameFor && <div className={s.selectionSummaryNameSpacer} />}
         <div className={s.selectionSummaryStats}>
           <div className={`${s.selectionSummaryItem} ${s.selectionSummaryItemFirst}`}>
             <span className={s.selectionSummaryLabel}>

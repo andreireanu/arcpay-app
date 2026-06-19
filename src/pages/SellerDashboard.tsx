@@ -19,6 +19,7 @@ import AppHeader from '../components/AppHeader'
 import ProductsGrid from '../components/ProductsGrid'
 import TransactionsList from '../components/TransactionsList'
 import CounterOffersList from '../components/CounterOffersList'
+import AlertModal from '../components/AlertModal'
 import s from '../styles/dashboard.module.css'
 
 export default function SellerDashboard() {
@@ -36,6 +37,7 @@ export default function SellerDashboard() {
   const [txTotal, setTxTotal] = useState(0)
   const [txLoaded, setTxLoaded] = useState(false)
   const [accepting, setAccepting] = useState(false)
+  const [acceptError, setAcceptError] = useState<string | null>(null)
   const acceptingRef = useRef(false)
 
   useEffect(() => {
@@ -165,6 +167,9 @@ export default function SellerDashboard() {
       setAllCounterOffers((prev) => prev.filter((co) => !ids.includes(co.id)))
     } catch (err) {
       console.error('Accept failed', err)
+      setAcceptError(
+        err instanceof Error ? err.message : 'Could not accept these offers.',
+      )
     } finally {
       acceptingRef.current = false
       setAccepting(false)
@@ -245,6 +250,12 @@ export default function SellerDashboard() {
           )}
         </section>
       </main>
+
+      <AlertModal
+        message={acceptError}
+        onClose={() => setAcceptError(null)}
+        title="Can't accept"
+      />
     </div>
   )
 }

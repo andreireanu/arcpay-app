@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Offer } from '../types/offer'
+import SuiIcon from '../assets/icons/SuiIcon'
 import SolIcon from '../assets/icons/SolIcon'
 import LinkIcon from '../assets/icons/LinkIcon'
 import s from '../styles/dashboard.module.css'
@@ -82,8 +83,11 @@ export default function ItemsBoughtGrid({
                   </div>
                   <div className={s.offerCardBottom}>
                     <div className={s.offerCardPrice}>
-                      <SolIcon />
-                      <span>{(offer.price_lamports / 1e9).toFixed(4)} SOL</span>
+                      {offer.chain === 'sui' ? <SuiIcon size={18} /> : <SolIcon size={18} />}
+                      <span>
+                        {(offer.price_lamports / 1e9).toFixed(4)}{' '}
+                        {offer.chain === 'sui' ? 'SUI' : 'SOL'}
+                      </span>
                     </div>
                     {!offer.unlimited && (
                       <span className={`${s.offerCardPill} ${s.offerCardAvailPill}`}>

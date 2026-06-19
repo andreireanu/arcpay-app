@@ -9,7 +9,7 @@ import { isSolanaWallet } from '@dynamic-labs/solana-core'
 import { isSuiWallet } from '@dynamic-labs/sui-core'
 import { useNavigate } from 'react-router-dom'
 import { exchangeToken } from '../supabase/auth/exchangeToken'
-import { getActiveChain, setActiveChain, type AppChain } from '../supabase/auth/auth'
+import { getActiveChain, setActiveChain, getCurrentRole, type AppChain } from '../supabase/auth/auth'
 import { useChainAuth } from '../context/ChainAuthContext'
 import suiWordmark from '../assets/sui.svg'
 import solanaWordmark from '../assets/solana.svg'
@@ -48,11 +48,16 @@ export default function Login() {
     )
     if (!target) return // wait until the chosen chain's wallet is linked
     exchangingRef.current = true
+    // A fresh login via the chain buttons (connectingChain set) is a seller
+    // sign-in. For an already-authenticated user just landing here (e.g. a buyer
+    // from the pay page navigating home), keep their current role instead of
+    // forcing seller.
+    const role = connectingChain ? 'seller' : getCurrentRole()
     ;(async () => {
       if (target.id !== primaryWallet?.id) await switchWallet(target.id)
-      await exchangeToken(token, target.address)
+      await exchangeToken(token, target.address, role)
       setShowAuthFlow(false)
-      navigate('/seller')
+      navigate(role === 'buyer' ? '/buyer' : '/seller')
     })().catch((err) => {
       setError(err instanceof Error ? err.message : 'Login failed')
       exchangingRef.current = false

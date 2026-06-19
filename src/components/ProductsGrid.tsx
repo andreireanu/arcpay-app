@@ -12,11 +12,15 @@ import {
 import { registerSellerIfNew } from "../supabase/sellers/sellers";
 import { getProduct } from "../supabase/products/products";
 import { getActiveChain } from "../supabase/auth/auth";
+import { getAutoAcceptForOffers } from "../supabase/autoAccept/autoAccept";
 import { cancelOfferAsSeller } from "../dispatcher/actions";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
+import type { AutoAccept } from "../types/autoAccept";
 import AddOfferModal from "./AddOfferModal";
-import ChainLogo from "./ChainLogo";
+import AutoAcceptButton from "./AutoAcceptButton";
+import SuiIcon from "../assets/icons/SuiIcon";
+import SolIcon from "../assets/icons/SolIcon";
 import PauseIcon from "../assets/icons/PauseIcon";
 import PlayIcon from "../assets/icons/PlayIcon";
 import CloseIcon from "../assets/icons/CloseIcon";
@@ -66,6 +70,10 @@ export default function ProductsGrid({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const menuWrapRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const [autoAcceptByOffer, setAutoAcceptByOffer] = useState<
+    Record<string, AutoAccept>
+  >({});
+
   const [visibleCount, setVisibleCount] = useState(initialVisible ?? 0);
 
   const isLimited = onViewAll != null && initialVisible != null;
@@ -93,6 +101,14 @@ export default function ProductsGrid({
     const t = setTimeout(() => setCancelCountdown((c) => c - 1), 1000);
     return () => clearTimeout(t);
   }, [cancelTarget, cancelCountdown]);
+
+  // Batch-load every offer's auto-accept rule so each card's button shows its
+  // on/off state without a query per card.
+  const offerIdKey = offers.map((o) => o.id).join(",");
+  useEffect(() => {
+    const ids = offerIdKey ? offerIdKey.split(",") : [];
+    getAutoAcceptForOffers(ids).then(setAutoAcceptByOffer).catch(console.error);
+  }, [offerIdKey]);
 
   async function handleCreateOffer(
     name: string,
@@ -317,18 +333,29 @@ export default function ProductsGrid({
                           </p>
                         )}
                       </div>
-                      <span
-                        className={`${s.statusBadge} ${statusClass(offer.status)}`}
-                      >
-                        {offer.status}
-                      </span>
+                      <div className={s.offerDetailStatusGroup}>
+                        <AutoAcceptButton
+                          offer={offer}
+                          rule={autoAcceptByOffer[offer.id] ?? null}
+                          compact
+                        />
+                        <span
+                          className={`${s.statusBadge} ${statusClass(offer.status)}`}
+                        >
+                          {offer.status}
+                        </span>
+                      </div>
                     </div>
                     <div
                       className={s.offerCardBottom}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className={s.offerCardPrice}>
-                        <ChainLogo chain={offer.chain} />
+                        {offer.chain === "sui" ? (
+                          <SuiIcon size={18} />
+                        ) : (
+                          <SolIcon size={18} />
+                        )}
                         <span>
                           {(offer.price_lamports / 1e9).toFixed(4)}{" "}
                           {offer.chain === "sui" ? "SUI" : "SOL"}

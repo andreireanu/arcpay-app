@@ -1,6 +1,7 @@
 -- ArcPay — full schema (single consolidated file; replaces all prior migrations)
 --
 DROP VIEW  IF EXISTS qr_seller_transactions CASCADE;
+DROP TABLE IF EXISTS qr_auto_accept CASCADE;
 DROP TABLE IF EXISTS qr_accepted_counter CASCADE;
 DROP TABLE IF EXISTS qr_counteroffers_seller_state CASCADE;
 DROP TABLE IF EXISTS qr_counteroffers CASCADE;
@@ -316,6 +317,59 @@ CREATE TABLE public.qr_accepted_counter (
 -- can read or write this table. Anon and authenticated roles are denied.
 ALTER TABLE qr_accepted_counter ENABLE ROW LEVEL SECURITY;
 
+-- ─── qr_auto_accept ──────────────────────────────────────────────────────────
+-- A seller's standing auto-accept rule for one offer. The seller stores how many
+-- of the best counter offers to accept (`quantity`) and a minimum average price
+-- (`avg_price`, base units — lamports/MIST). When a new counter offer is recorded,
+-- the counteroffer webhook evaluates this rule and, if the best `quantity` active
+-- offers average at least `avg_price`, settles them to the seller via
+-- admin_settle_offer. No per-batch on-chain consent is needed — this row IS the
+-- stored consent (the same trust model the accept flow already relies on).
+--
+-- One-shot: when it fires, `triggered_at` is stamped (disarming it) and
+-- `triggered_price` records the average actually achieved, kept as an audit trail.
+-- Saving the rule again clears both stamps to re-arm it.
+CREATE TABLE public.qr_auto_accept (
+  offer_id        uuid        PRIMARY KEY REFERENCES qr_offers(id) ON DELETE CASCADE,
+  quantity        integer     NOT NULL CHECK (quantity > 0),
+  avg_price       bigint      NOT NULL CHECK (avg_price >= 0),
+  triggered_price bigint,
+  triggered_at    timestamptz,
+  created_at      timestamptz DEFAULT now()
+);
+
+COMMENT ON COLUMN public.qr_auto_accept.quantity IS
+  'number of best counter offers to auto-accept in one batch';
+COMMENT ON COLUMN public.qr_auto_accept.avg_price IS
+  'minimum average price (seller_amount + fee_amount, base units) the best N must meet';
+COMMENT ON COLUMN public.qr_auto_accept.triggered_price IS
+  'average price (base units) of the batch that actually fired; NULL while armed';
+COMMENT ON COLUMN public.qr_auto_accept.triggered_at IS
+  'when the rule fired; NULL while armed (one-shot guard)';
+
+ALTER TABLE public.qr_auto_accept ENABLE ROW LEVEL SECURITY;
+
+-- Seller manages the rule only for offers they own (mirrors qr_offers ownership).
+-- The backend evaluates/stamps it with the service role, which bypasses RLS.
+CREATE POLICY "sellers manage own auto-accept"
+  ON public.qr_auto_accept FOR ALL TO authenticated
+  USING (
+    offer_id IN (
+      SELECT id FROM qr_offers
+      WHERE seller_wallet IN (
+        SELECT wallet_address FROM sellers WHERE user_id = auth.uid()
+      )
+    )
+  )
+  WITH CHECK (
+    offer_id IN (
+      SELECT id FROM qr_offers
+      WHERE seller_wallet IN (
+        SELECT wallet_address FROM sellers WHERE user_id = auth.uid()
+      )
+    )
+  );
+
 -- ─── qr_seller_transactions (view) ───────────────────────────────────────────
 -- The seller's transaction history is a UNION of two sources: direct buys
 -- (qr_transactions) and confirmed counter offers (qr_counteroffers WHERE
@@ -418,5 +472,5 @@ VALUES (
   'QR Generator',
   'Create QR codes for your product listings and accept SOL payments on-chain.',
   'https://twjaooacmrveivxxfwyx.supabase.co/storage/v1/object/public/assets/qr.jpg',
-  1000
+  100
 ) ON CONFLICT (id) DO NOTHING;

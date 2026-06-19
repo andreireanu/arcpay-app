@@ -762,6 +762,46 @@
     gap: 12px;
 }
 
+/* Right cluster of the name row: the auto-accept button sits to the left of the
+   status badge. */
+.offerDetailStatusGroup {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.autoAcceptBtn {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    padding: 6px 14px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.autoAcceptBtn:hover {
+    opacity: 0.8;
+}
+
+/* Smaller pill to match the dense dashboard cards' badges/pills (12px). */
+.autoAcceptBtnCompact {
+    padding: 5px 12px;
+    font-size: 12px;
+    line-height: 16px;
+}
+
+/* Armed (rule set and not yet fired) — green to read as active. */
+.autoAcceptBtnOn {
+    border-color: #00b54b;
+    color: #00b54b;
+}
+
 .offerDetailThumb {
     width: 168px;
     height: 168px;
@@ -956,6 +996,40 @@
     line-height: 28px;
     letter-spacing: -0.3px;
     color: var(--color-white);
+}
+
+.modalDescription {
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted);
+}
+
+.modalHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.modalClose {
+    background: transparent;
+    border: none;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.modalClose:hover:not(:disabled) {
+    color: var(--color-white);
+}
+
+.modalClose:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 
 .modalFields {
@@ -1465,24 +1539,16 @@
 }
 
 .selectionSummaryStats {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
     display: flex;
     align-items: center;
-    /* Match the rows' inter-column gap so the stats sit on the same grid. */
-    gap: 16px;
-}
-
-/* Spacer matching .coListName, so on the dashboard (where each row leads with an
-   offer-name column) the stats shift right to stay aligned with the columns. */
-.selectionSummaryNameSpacer {
-    flex: 1 1 auto;
-    min-width: 170px;
+    /* Comfortable spacing between the three stats, packed at the left. */
+    gap: 40px;
 }
 
 .selectionSummaryItem {
-    /* Same fixed width as .coListCol so each stat lines up over a data column. */
-    flex: 0 0 132px;
-    min-width: 0;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -1490,7 +1556,7 @@
 }
 
 .selectionSummaryItemFirst {
-    /* No nudge needed now that items align to the column grid. */
+    /* Left-packed; no special treatment for the first item. */
 }
 
 .selectionSummarySep {
