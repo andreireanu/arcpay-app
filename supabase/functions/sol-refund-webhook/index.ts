@@ -58,13 +58,11 @@ Deno.serve(async (req) => {
       if (bytes.length < 8) continue;
       const disc = bytes.slice(0, 8);
 
-      // OfferBought: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 seller_amount + 8 fee_amount + 8 timestamp + 1 auto = 113 bytes
-      if (bytes.length >= 112 && arraysEqual(disc, boughtDisc)) {
+      // OfferBought: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 seller_amount + 8 fee_amount + 1 auto + 8 timestamp = 113 bytes
+      if (bytes.length >= 113 && arraysEqual(disc, boughtDisc)) {
         const ephemeralUuid = bytesToUuid(bytes.slice(8, 24));
-        // The settling tx carries whether the auto-accept rule triggered it (vs
-        // a seller manual accept). Emit-only on chain; here it picks the final
-        // status. Trailing byte at offset 112; default false for legacy events.
-        const auto = bytes.length >= 113 ? bytes[112] === 1 : false;
+        // auto sits before the timestamp (offset 104), matching the event struct field order.
+        const auto = bytes[104] === 1;
         const status = auto ? "auto_confirmed" : "confirmed";
         console.log("offer_bought event", ephemeralUuid, "auto", auto);
 
@@ -124,7 +122,11 @@ Deno.serve(async (req) => {
 
         const { error } = await supabase
           .from("qr_counteroffers")
-          .update({ returned: true, settle_tx_signature: txSignature })
+          .update({
+            returned: true,
+            settle_tx_signature: txSignature,
+            confirmed_at: new Date().toISOString(),
+          })
           .eq("ephemeral_id", ephemeralUuid);
 
         if (error)

@@ -72,11 +72,17 @@ async function handleBuyerCancel(
     });
   }
 
-  console.log("sui-cancel-webhook buyer_cancel", ephemeralUuid, "digest", payload.tx_digest ?? "");
+  const txDigest = typeof payload.tx_digest === "string" ? payload.tx_digest : "";
+  console.log("sui-cancel-webhook buyer_cancel", ephemeralUuid, "digest", txDigest);
 
   const { data: canceledRows, error } = await supabase
     .from("qr_counteroffers")
-    .update({ status: "buyer_canceled", returned: true })
+    .update({
+      status: "buyer_canceled",
+      returned: true,
+      settle_tx_signature: txDigest,
+      confirmed_at: new Date().toISOString(),
+    })
     .eq("ephemeral_id", ephemeralUuid)
     .eq("chain", "sui")
     .select("id");

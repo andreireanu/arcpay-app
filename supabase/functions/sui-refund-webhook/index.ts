@@ -151,7 +151,11 @@ async function handleRefunded(
 
   const { error } = await supabase
     .from("qr_counteroffers")
-    .update({ returned: true, settle_tx_signature: txDigest })
+    .update({
+      returned: true,
+      settle_tx_signature: txDigest,
+      confirmed_at: new Date().toISOString(),
+    })
     .eq("ephemeral_id", ephemeralUuid)
     .eq("chain", "sui");
 
