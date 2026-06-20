@@ -1,4 +1,5 @@
 import { supabase } from '../client'
+import { config } from '../../config/env'
 
 export async function exchangeToken(
   dynamicToken: string,
@@ -6,7 +7,7 @@ export async function exchangeToken(
   role: 'seller' | 'buyer' = 'seller',
 ): Promise<void> {
   const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/auth-exchange`,
+    `${config.supabase.url}/functions/v1/auth-exchange`,
     {
       method: 'POST',
       headers: {

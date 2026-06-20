@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Offer } from '../types/offer'
+import { statusClass } from '../utils/offerStatus'
 import SuiIcon from '../assets/icons/SuiIcon'
 import SolIcon from '../assets/icons/SolIcon'
 import LinkIcon from '../assets/icons/LinkIcon'
@@ -32,14 +33,6 @@ export default function ItemsBoughtGrid({
 
   const shown = initialVisible != null ? offers.slice(0, visibleCount) : offers
   const showMore = initialVisible != null && offers.length > visibleCount
-
-  function statusClass(status: Offer['status']) {
-    if (status === 'active') return s.statusActive
-    if (status === 'paused') return s.statusPaused
-    if (status === 'canceled') return s.statusCanceled
-    if (status === 'sold') return s.statusSold
-    return ''
-  }
 
   return (
     <section className={s.offersSection}>

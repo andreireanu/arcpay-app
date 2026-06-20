@@ -12,6 +12,7 @@ import {
 } from "../supabase/offers/getCounterOffers";
 import { registerBuyer } from "../supabase/buyers/buyers";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { CounterOffer } from "../types/counterOffer";
 import {
   buyOffer,
@@ -41,10 +42,12 @@ export default function Pay() {
   const [counterOfferOpen, setCounterOfferOpen] = useState(false);
   const [counterPrice, setCounterPrice] = useState("");
   const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [counterError, setCounterError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [activeCounterOffer, setActiveCounterOffer] =
     useState<CounterOffer | null>(null);
   const [counterOfferLoading, setCounterOfferLoading] = useState(false);
@@ -61,6 +64,11 @@ export default function Pay() {
       ? isSuiWallet(primaryWallet)
       : isSolanaWallet(primaryWallet));
   const exchangingRef = useRef(false);
+
+  useEscapeKey(counterOfferOpen, () => {
+    setCounterOfferOpen(false);
+    setCounterError(null);
+  });
 
   useEffect(() => {
     if (!offerId) return;
@@ -140,9 +148,25 @@ export default function Pay() {
   async function handleBuy() {
     if (!connected || !primaryWallet || !offerId || buying || !offer) return;
     setBuying(true);
+    setBuyError(null);
     try {
       await buyOffer(primaryWallet, connection, offer);
-      await registerBuyer(primaryWallet.address);
+      // Bookkeeping only — must not fail the purchase the buyer already made
+      // on-chain, so it runs detached from the buy result.
+      registerBuyer(primaryWallet.address).catch((err) =>
+        console.error("Failed to register buyer", err),
+      );
+    } catch (err) {
+      console.error("Failed to buy offer", err);
+      const message = err instanceof Error ? err.message : String(err);
+      const cur = offer.chain === "sui" ? "SUI" : "SOL";
+      if (/InsufficientCoinBalance|insufficient/i.test(message)) {
+        setBuyError(`Not enough ${cur} in your wallet to complete the purchase.`);
+      } else if (/reject|denied|cancell?ed/i.test(message)) {
+        setBuyError("Purchase canceled.");
+      } else {
+        setBuyError("Purchase failed. Please try again.");
+      }
     } finally {
       setBuying(false);
     }
@@ -158,7 +182,11 @@ export default function Pay() {
     setCounterError(null);
     try {
       await counterOffer(primaryWallet, connection, offer, lamports);
-      await registerBuyer(primaryWallet.address);
+      // Bookkeeping only — the offer is already on-chain, so a registration
+      // failure must not flip the flow into the error path.
+      registerBuyer(primaryWallet.address).catch((err) =>
+        console.error("Failed to register buyer", err),
+      );
       setSubmitted(true);
       setCounterOfferOpen(false);
       setCounterPrice("");
@@ -181,6 +209,7 @@ export default function Pay() {
     if (!activeCounterOffer || !connected || !primaryWallet || canceling)
       return;
     setCanceling(true);
+    setCancelError(null);
     try {
       await cancelCounterOfferAction(
         primaryWallet,
@@ -190,6 +219,7 @@ export default function Pay() {
       setActiveCounterOffer(null);
     } catch (err) {
       console.error("Failed to cancel offer", err);
+      setCancelError("Could not cancel your offer. Please try again.");
     } finally {
       setCanceling(false);
     }
@@ -283,13 +313,16 @@ export default function Pay() {
           ) : (
             <div className={s.actions}>
               {connected ? (
-                <button
-                  className={s.buyButton}
-                  onClick={handleBuy}
-                  disabled={buying}
-                >
-                  {buying ? "Buying…" : "BUY"}
-                </button>
+                <>
+                  <button
+                    className={s.buyButton}
+                    onClick={handleBuy}
+                    disabled={buying}
+                  >
+                    {buying ? "Buying…" : "BUY"}
+                  </button>
+                  {buyError && <p className={s.errorMessage}>{buyError}</p>}
+                </>
               ) : (
                 <button
                   className={s.connectButton}
@@ -321,6 +354,9 @@ export default function Pay() {
                       {canceling ? "Canceling..." : "Cancel"}
                     </button>
                   </div>
+                  {cancelError && (
+                    <p className={s.errorMessage}>{cancelError}</p>
+                  )}
                 </div>
               )}
 
@@ -364,9 +400,6 @@ export default function Pay() {
               future marketing discount campaign or reviewed manually by the
               merchant. You'll be notified before any payment is taken.
             </p>
-            <button className={s.modalLearnMore} onClick={() => {}}>
-              Learn more about offers
-            </button>
             <div className={s.modalField}>
               <label className={s.modalLabel}>Offered price ({currency})</label>
               <input
@@ -409,7 +442,8 @@ export default function Pay() {
               <div className={s.feeRow}>
                 <span className={s.feeLabel}>Total amount charged</span>
                 <span className={s.feeValue}>
-                  ± {formatSol(totalChargedLamports)} {currency}
+                  {isSui ? "≈" : "±"} {formatSol(totalChargedLamports)}{" "}
+                  {currency}
                 </span>
               </div>
             </div>
@@ -430,7 +464,7 @@ export default function Pay() {
                 className={s.modalSubmitButton}
                 disabled={
                   !counterPrice ||
-                  parseFloat(counterPrice) <= 0 ||
+                  Math.round(parseFloat(counterPrice) * 1_000_000_000) <= 0 ||
                   (!!offer &&
                     Math.round(parseFloat(counterPrice) * 1_000_000_000) >=
                       offer.price_lamports) ||

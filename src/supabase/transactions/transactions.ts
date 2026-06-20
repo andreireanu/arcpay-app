@@ -61,7 +61,7 @@ export async function getTransactionsByBuyer(
     .from('qr_seller_transactions')
     .select('*', { count: 'exact' })
     .eq('buyer_wallet', buyerWallet)
-    // Purchases only; canceled offers live in the buyer's "Past offers" tab.
+    // Purchases only; canceled offers live in the buyer's "Canceled offers" tab.
     .in('status', ['confirmed', 'auto_confirmed'])
   if (offerId) query = query.eq('offer_id', offerId)
 
@@ -77,7 +77,7 @@ export async function getTransactionsByBuyer(
   }
 }
 
-// The buyer's canceled counter offers (their "Past offers" tab) — offers that
+// The buyer's canceled counter offers (their "Canceled offers" tab) — offers that
 // ended without a purchase, by either party. Reads the same view filtered to the
 // canceled statuses, scoped to buyer_wallet for the same reason as above.
 export async function getCanceledOffersByBuyer(

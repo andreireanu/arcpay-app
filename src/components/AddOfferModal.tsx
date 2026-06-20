@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import s from "../styles/dashboard.module.css";
 
 const UNLIMITED_SENTINEL = 2_147_483_647;
@@ -16,6 +17,8 @@ interface Props {
   creating: boolean;
   /** The chain the seller is logged in on — drives the price currency label. */
   chain: "solana" | "sui";
+  /** Set when the last create attempt failed; shown below the form. */
+  error?: string | null;
 }
 
 export default function AddOfferModal({
@@ -24,12 +27,15 @@ export default function AddOfferModal({
   onSubmit,
   creating,
   chain,
+  error,
 }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [limitQuantity, setLimitQuantity] = useState(false);
   const [quantity, setQuantity] = useState("1");
+
+  useEscapeKey(open && !creating, onClose);
 
   if (!open) return null;
 
@@ -51,8 +57,13 @@ export default function AddOfferModal({
   }
 
   return (
-    <div className={s.modalOverlay}>
-      <div className={s.modal}>
+    <div
+      className={s.modalOverlay}
+      onClick={() => {
+        if (!creating) onClose();
+      }}
+    >
+      <div className={s.modal} onClick={(e) => e.stopPropagation()}>
         <h2 className={s.modalTitle}>New offer</h2>
 
         <div className={s.modalFields}>
@@ -113,8 +124,14 @@ export default function AddOfferModal({
           )}
         </div>
 
+        {error && <p className={s.errorMessage}>{error}</p>}
+
         <div className={s.modalActions}>
-          <button className={s.modalCancelButton} onClick={onClose}>
+          <button
+            className={s.modalCancelButton}
+            onClick={onClose}
+            disabled={creating}
+          >
             Cancel
           </button>
           <button

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import QRCode from "qrcode";
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { useConnection } from "@solana/wallet-adapter-react";
 import {
@@ -14,6 +13,9 @@ import { getProduct } from "../supabase/products/products";
 import { getActiveChain } from "../supabase/auth/auth";
 import { getAutoAcceptForOffers } from "../supabase/autoAccept/autoAccept";
 import { cancelOfferAsSeller } from "../dispatcher/actions";
+import { downloadQrSvg } from "../utils/qr";
+import { statusClass } from "../utils/offerStatus";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
 import type { AutoAccept } from "../types/autoAccept";
@@ -29,6 +31,8 @@ import LinkIcon from "../assets/icons/LinkIcon";
 import DownloadIcon from "../assets/icons/DownloadIcon";
 import s from "../styles/dashboard.module.css";
 
+// Fixed seed row in the products table (same UUID across all environments) — the
+// platform product offers are created against, carrying the fee_bps.
 const QR_PRODUCT_ID = "2b78e60b-533d-469d-937e-aa462dc37c28";
 
 interface ProductsGridProps {
@@ -60,6 +64,7 @@ export default function ProductsGrid({
 
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const [cancelTarget, setCancelTarget] = useState<Offer | null>(null);
@@ -75,6 +80,8 @@ export default function ProductsGrid({
   >({});
 
   const [visibleCount, setVisibleCount] = useState(initialVisible ?? 0);
+
+  useEscapeKey(cancelTarget != null && !canceling, handleCancelDismiss);
 
   const isLimited = onViewAll != null && initialVisible != null;
   const isPaginated = paginate === true && initialVisible != null;
@@ -119,6 +126,7 @@ export default function ProductsGrid({
   ) {
     if (!walletAddress) return;
     setCreating(true);
+    setCreateError(null);
     try {
       await registerSellerIfNew(walletAddress);
       const product = await getProduct(QR_PRODUCT_ID);
@@ -137,6 +145,7 @@ export default function ProductsGrid({
       setOfferModalOpen(false);
     } catch (err) {
       console.error("Failed to create offer", err);
+      setCreateError("Could not create the offer. Please try again.");
     } finally {
       setCreating(false);
     }
@@ -225,7 +234,9 @@ export default function ProductsGrid({
       setCancelTarget(null);
     } catch (err) {
       console.error("Failed to cancel offer", err);
-      if (cancelTarget) {
+      // Only resume if we paused it for this cancel — never flip an
+      // already-paused offer back to active.
+      if (cancelWasActiveRef.current && cancelTarget) {
         try {
           await resumeOffer(cancelTarget.id);
           setOffers((prev) =>
@@ -242,50 +253,11 @@ export default function ProductsGrid({
     }
   }
 
-  async function handleDownloadQr(offer: Offer, e: React.MouseEvent) {
+  function handleDownloadQr(offer: Offer, e: React.MouseEvent) {
     e.stopPropagation();
-    const url = `${window.location.origin}/pay/${offer.id}`;
-    let svg: string = await QRCode.toString(url, {
-      type: "svg",
-      errorCorrectionLevel: "H",
-    });
-    try {
-      const resp = await fetch("/favicon.svg");
-      if (resp.ok) {
-        const b64 = btoa(await resp.text());
-        const logoData = `data:image/svg+xml;base64,${b64}`;
-        const match = svg.match(
-          /viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/,
-        );
-        if (match) {
-          const w = parseFloat(match[1]);
-          const h = parseFloat(match[2]);
-          const logoSize = Math.round(w * 0.22);
-          const x = Math.round((w - logoSize) / 2);
-          const y = Math.round((h - logoSize) / 2);
-          svg = svg.replace(
-            "</svg>",
-            `<image href="${logoData}" x="${x}" y="${y}" width="${logoSize}" height="${logoSize}"/></svg>`,
-          );
-        }
-      }
-    } catch {
-      /* download without logo if fetch fails */
-    }
-    const blob = new Blob([svg], { type: "image/svg+xml" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${offer.name}-qr.svg`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  function statusClass(status: Offer["status"]) {
-    if (status === "active") return s.statusActive;
-    if (status === "paused") return s.statusPaused;
-    if (status === "canceled") return s.statusCanceled;
-    if (status === "sold") return s.statusSold;
-    return "";
+    downloadQrSvg(offer.name, offer.id).catch((err) =>
+      console.error("Failed to download QR", err),
+    );
   }
 
   const canAct = (o: Offer) => o.status === "active" || o.status === "paused";
@@ -296,7 +268,10 @@ export default function ProductsGrid({
         <h2 className={s.sectionTitle}>{title}</h2>
         <button
           className={s.createButton}
-          onClick={() => setOfferModalOpen(true)}
+          onClick={() => {
+            setCreateError(null);
+            setOfferModalOpen(true);
+          }}
         >
           Create
         </button>
@@ -475,8 +450,8 @@ export default function ProductsGrid({
       )}
 
       {cancelTarget && (
-        <div className={s.modalOverlay}>
-          <div className={s.modal}>
+        <div className={s.modalOverlay} onClick={handleCancelDismiss}>
+          <div className={s.modal} onClick={(e) => e.stopPropagation()}>
             <h2 className={s.modalTitle}>Cancel offer</h2>
             <p className={s.offersEmpty}>
               Cancel &ldquo;{cancelTarget.name}&rdquo;? Active buyer offers will
@@ -513,6 +488,7 @@ export default function ProductsGrid({
         onSubmit={handleCreateOffer}
         creating={creating}
         chain={getActiveChain()}
+        error={createError}
       />
     </section>
   );

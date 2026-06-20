@@ -405,6 +405,13 @@
     color: var(--color-muted);
 }
 
+.errorMessage {
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-error);
+}
+
 .offersGrid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -562,6 +569,7 @@
 .filterChip {
     display: inline-flex;
     align-items: center;
+    margin-left: 16px;
     gap: 8px;
     background: #1a0e28;
     border: 1px solid #a78bfa55;

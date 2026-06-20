@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AutoAccept } from "../types/autoAccept";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import CloseIcon from "../assets/icons/CloseIcon";
 import s from "../styles/dashboard.module.css";
 
@@ -32,6 +33,16 @@ export default function AutoAcceptModal({
     existing ? String(existing.avg_price / 1_000_000_000) : "",
   );
 
+  // The modal stays mounted (returns null when closed), so re-seed the inputs
+  // from the current rule each time it opens.
+  useEffect(() => {
+    if (!open) return;
+    setQuantity(existing ? String(existing.quantity) : "");
+    setPrice(existing ? String(existing.avg_price / 1_000_000_000) : "");
+  }, [open, existing]);
+
+  useEscapeKey(open && !saving, onClose);
+
   if (!open) return null;
 
   // Both SOL and SUI use 9 decimals, so the price→base-unit conversion is the
@@ -46,8 +57,14 @@ export default function AutoAcceptModal({
   }
 
   return createPortal(
-    <div className={s.modalOverlay} onClick={(e) => e.stopPropagation()}>
-      <div className={s.modal}>
+    <div
+      className={s.modalOverlay}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!saving) onClose();
+      }}
+    >
+      <div className={s.modal} onClick={(e) => e.stopPropagation()}>
         <div className={s.modalHeader}>
           <h2 className={s.modalTitle}>Auto accept</h2>
           <button

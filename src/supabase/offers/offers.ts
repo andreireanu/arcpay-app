@@ -110,27 +110,3 @@ export function watchOfferStatuses(
 
   return () => channels.forEach((c) => c.unsubscribe())
 }
-
-export function watchOfferStatus(
-  offerId: string,
-  onStatus: (status: string) => void,
-): () => void {
-  const channel = supabase
-    .channel(`offer-status-${offerId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'qr_offers',
-        filter: `id=eq.${offerId}`,
-      },
-      (payload) => {
-        const status = (payload.new as { status?: string }).status
-        if (status) onStatus(status)
-      },
-    )
-    .subscribe()
-
-  return () => channel.unsubscribe()
-}

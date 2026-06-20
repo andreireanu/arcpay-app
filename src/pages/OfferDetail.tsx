@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import QRCode from "qrcode";
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { useConnection } from "@solana/wallet-adapter-react";
 import {
@@ -26,6 +25,9 @@ import {
   acceptCounterOffers,
   cancelOfferAsSeller,
 } from "../dispatcher/actions";
+import { downloadQrSvg } from "../utils/qr";
+import { statusClass } from "../utils/offerStatus";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
 import type { Transaction } from "../types/transaction";
@@ -64,6 +66,12 @@ export default function OfferDetail() {
   const [canceling, setCanceling] = useState(false);
   const acceptingRef = useRef(false);
   const cancelWasActiveRef = useRef(false);
+  // Latest offer name for the realtime callbacks, so they can key on offerId
+  // alone and not re-subscribe (dropping events) when the name resolves.
+  const offerNameRef = useRef<string | undefined>(undefined);
+  offerNameRef.current = offer?.name;
+
+  useEscapeKey(cancelModalOpen && !canceling, handleCancelDismiss);
 
   useEffect(() => {
     if (!offerId) return;
@@ -138,10 +146,10 @@ export default function OfferDetail() {
       setTransactions((prev) =>
         prev.some((t) => t.id === row.id)
           ? prev
-          : [{ ...row, offer_name: offer?.name ?? "", source: "buy" as const }, ...prev],
+          : [{ ...row, offer_name: offerNameRef.current ?? "", source: "buy" as const }, ...prev],
       );
     });
-  }, [offerId, offer?.name]);
+  }, [offerId]);
 
   useEffect(() => {
     if (!offerId) return;
@@ -150,27 +158,37 @@ export default function OfferDetail() {
         prev.some((t) => t.id === row.id)
           ? prev
           : [
-              { ...row, offer_name: offer?.name ?? "" },
+              { ...row, offer_name: offerNameRef.current ?? "" },
               ...prev,
             ],
       );
     });
-  }, [offerId, offer?.name]);
+  }, [offerId]);
 
   async function handlePause() {
     if (!offer) return;
     setToggling(true);
-    await pauseOffer(offer.id);
-    setOffer((prev) => (prev ? { ...prev, status: "paused" } : prev));
-    setToggling(false);
+    try {
+      await pauseOffer(offer.id);
+      setOffer((prev) => (prev ? { ...prev, status: "paused" } : prev));
+    } catch (err) {
+      console.error("Failed to pause offer", err);
+    } finally {
+      setToggling(false);
+    }
   }
 
   async function handleResume() {
     if (!offer) return;
     setToggling(true);
-    await resumeOffer(offer.id);
-    setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
-    setToggling(false);
+    try {
+      await resumeOffer(offer.id);
+      setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
+    } catch (err) {
+      console.error("Failed to resume offer", err);
+    } finally {
+      setToggling(false);
+    }
   }
 
   useEffect(() => {
@@ -233,53 +251,26 @@ export default function OfferDetail() {
       setCancelModalOpen(false);
     } catch (err) {
       console.error("Failed to cancel offer", err);
-      try {
-        await resumeOffer(offer.id);
-        setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
-      } catch {
-        /* best-effort resume; original cancel error already logged */
+      // Only resume if we paused it for this cancel — never flip an
+      // already-paused offer back to active.
+      if (cancelWasActiveRef.current) {
+        try {
+          await resumeOffer(offer.id);
+          setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
+        } catch {
+          /* best-effort resume; original cancel error already logged */
+        }
       }
     } finally {
       setCanceling(false);
     }
   }
 
-  async function handleDownloadQr() {
+  function handleDownloadQr() {
     if (!offer) return;
-    const url = `${window.location.origin}/pay/${offer.id}`;
-    let svg: string = await QRCode.toString(url, {
-      type: "svg",
-      errorCorrectionLevel: "H",
-    });
-    try {
-      const resp = await fetch("/favicon.svg");
-      if (resp.ok) {
-        const b64 = btoa(await resp.text());
-        const logoData = `data:image/svg+xml;base64,${b64}`;
-        const match = svg.match(
-          /viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/,
-        );
-        if (match) {
-          const w = parseFloat(match[1]);
-          const h = parseFloat(match[2]);
-          const logoSize = Math.round(w * 0.22);
-          const x = Math.round((w - logoSize) / 2);
-          const y = Math.round((h - logoSize) / 2);
-          svg = svg.replace(
-            "</svg>",
-            `<image href="${logoData}" x="${x}" y="${y}" width="${logoSize}" height="${logoSize}"/></svg>`,
-          );
-        }
-      }
-    } catch {
-      /* download without logo if fetch fails */
-    }
-    const blob = new Blob([svg], { type: "image/svg+xml" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${offer.name}-qr.svg`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadQrSvg(offer.name, offer.id).catch((err) =>
+      console.error("Failed to download QR", err),
+    );
   }
 
   async function handleAccept(ids: string[]) {
@@ -289,6 +280,9 @@ export default function OfferDetail() {
     setAccepting(true);
     try {
       await acceptCounterOffers(primaryWallet, connection, ids);
+      // Optimistically drop the accepted rows so they can't be re-accepted
+      // during the settlement lag (the webhook removes them for good).
+      setCounterOffers((prev) => prev.filter((co) => !ids.includes(co.id)));
     } catch (err) {
       console.error("Accept counter offer failed", err);
       setAcceptError(
@@ -321,14 +315,6 @@ export default function OfferDetail() {
     } catch (err) {
       console.error("Failed to show hidden counter offers", err);
     }
-  }
-
-  function statusClass(status: Offer["status"]) {
-    if (status === "active") return s.statusActive;
-    if (status === "paused") return s.statusPaused;
-    if (status === "canceled") return s.statusCanceled;
-    if (status === "sold") return s.statusSold;
-    return "";
   }
 
   if (loading) {

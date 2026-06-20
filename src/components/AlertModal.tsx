@@ -1,3 +1,4 @@
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import s from "../styles/dashboard.module.css";
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 // Minimal informational popup (e.g. an action the backend refused). Shared so any
 // page can surface an error the same way.
 export default function AlertModal({ message, onClose, title = "Heads up" }: Props) {
+  useEscapeKey(!!message, onClose);
   if (!message) return null;
   return (
     <div className={s.modalOverlay} onClick={onClose}>

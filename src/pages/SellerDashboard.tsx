@@ -29,6 +29,11 @@ export default function SellerDashboard() {
   const walletAddress = primaryWallet?.address
 
   const [offers, setOffers] = useState<Offer[]>([])
+  // Latest offers for realtime callbacks that resolve an offer name, so the
+  // subscriptions below can key on the id set (not the array reference) without
+  // capturing a stale list.
+  const offersRef = useRef(offers)
+  offersRef.current = offers
 
   const [activeTab, setActiveTab] = useState<'counteroffers' | 'transactions'>('counteroffers')
   const [allCounterOffers, setAllCounterOffers] = useState<CounterOffer[]>([])
@@ -59,42 +64,45 @@ export default function SellerDashboard() {
   }, [ownOfferIdKey])
 
   useEffect(() => {
-    if (offers.length === 0) return
-    const unsubs = offers.map((o) =>
-      watchNewCounterOffers(o.id, (co) => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    const unsubs = ids.map((id) =>
+      watchNewCounterOffers(id, (co) => {
         setAllCounterOffers((prev) => [co, ...prev])
       }),
     )
     return () => unsubs.forEach((u) => u())
-  }, [offers])
+  }, [ownOfferIdKey])
 
   useEffect(() => {
-    if (offers.length === 0) return
-    const unsubs = offers.map((o) =>
-      watchNewTransactions(o.id, (row) => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    const unsubs = ids.map((id) =>
+      watchNewTransactions(id, (row) => {
         setTransactions((prev) => {
           if (prev.some((t) => t.id === row.id)) return prev
-          const offer_name = offers.find((of) => of.id === row.offer_id)?.name ?? ''
+          const offer_name = offersRef.current.find((of) => of.id === row.offer_id)?.name ?? ''
           return [{ ...row, offer_name, source: 'buy' as const }, ...prev]
         })
       }),
     )
     return () => unsubs.forEach((u) => u())
-  }, [offers])
+  }, [ownOfferIdKey])
 
   useEffect(() => {
-    if (offers.length === 0) return
-    const unsubs = offers.map((o) =>
-      watchSettledCounterOffers(o.id, (row) => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    const unsubs = ids.map((id) =>
+      watchSettledCounterOffers(id, (row) => {
         setTransactions((prev) => {
           if (prev.some((t) => t.id === row.id)) return prev
-          const offer_name = offers.find((of) => of.id === row.offer_id)?.name ?? ''
+          const offer_name = offersRef.current.find((of) => of.id === row.offer_id)?.name ?? ''
           return [{ ...row, offer_name }, ...prev]
         })
       }),
     )
     return () => unsubs.forEach((u) => u())
-  }, [offers])
+  }, [ownOfferIdKey])
 
   const coIdKey = allCounterOffers.map((co) => co.id).join(',')
   useEffect(() => {
@@ -117,11 +125,12 @@ export default function SellerDashboard() {
   }, [coIdKey])
 
   useEffect(() => {
-    if (offers.length === 0) return
-    return watchOfferStatuses(offers.map((o) => o.id), (offerId, update) => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    return watchOfferStatuses(ids, (offerId, update) => {
       setOffers((prev) => prev.map((o) => (o.id === offerId ? { ...o, ...update } : o)))
     })
-  }, [offers])
+  }, [ownOfferIdKey])
 
   useEffect(() => {
     if (activeTab !== 'transactions' || txLoaded || !walletAddress) return

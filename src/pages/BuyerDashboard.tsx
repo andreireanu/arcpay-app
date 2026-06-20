@@ -39,9 +39,13 @@ export default function BuyerDashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [txTotal, setTxTotal] = useState(0)
   const [txLoaded, setTxLoaded] = useState(false)
+  // Bumped to force a Transactions re-fetch when a counter offer settles (those
+  // don't arrive via the qr_transactions live subscription).
+  const [txReload, setTxReload] = useState(0)
   const [pastOffers, setPastOffers] = useState<Transaction[]>([])
   const [pastLoaded, setPastLoaded] = useState(false)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
   // When set, both tabs are filtered to a single bought item (clicked above).
   const [focusedOfferId, setFocusedOfferId] = useState<string | null>(null)
   const cancelingRef = useRef(false)
@@ -87,6 +91,18 @@ export default function BuyerDashboard() {
   const offerNamesRef = useRef(offerNames)
   offerNamesRef.current = offerNames
 
+  // A filter change is user-driven, so show the loading state rather than the
+  // previous item's rows. A txReload bump is a background refresh and keeps the
+  // current rows visible (no flag reset here).
+  useEffect(() => {
+    setTxLoaded(false)
+  }, [focusedOfferId])
+
+  // Don't carry a stale cancel error across tab navigations.
+  useEffect(() => {
+    setCancelError(null)
+  }, [activeTab])
+
   // Reloads whenever the focused item changes so the Transactions tab shows that
   // item's buys (not just whatever was in the latest unfiltered page).
   useEffect(() => {
@@ -101,7 +117,7 @@ export default function BuyerDashboard() {
       })
       .catch(console.error)
     return () => { cancelled = true }
-  }, [walletAddress, focusedOfferId])
+  }, [walletAddress, focusedOfferId, txReload])
 
   // Live: a new buy by this wallet lands in qr_transactions.
   useEffect(() => {
@@ -119,7 +135,7 @@ export default function BuyerDashboard() {
     })
   }, [walletAddress])
 
-  // Past offers (canceled by either party). Loaded lazily when the tab opens.
+  // Canceled offers (by either party). Loaded lazily when the tab opens.
   useEffect(() => {
     if (activeTab !== 'past' || pastLoaded || !walletAddress) return
     getCanceledOffersByBuyer(walletAddress)
@@ -137,9 +153,9 @@ export default function BuyerDashboard() {
       setCounterOffers((prev) => prev.filter((co) => co.id !== id))
       if (status === 'confirmed' || status === 'auto_confirmed') {
         if (walletAddress) getItemsBought(walletAddress).then(setItems).catch(console.error)
-        setTxLoaded(false)
+        setTxReload((n) => n + 1)
       } else {
-        // buyer_canceled / seller_canceled → refetch Past offers next open.
+        // buyer_canceled / seller_canceled → refetch Canceled offers next open.
         setPastLoaded(false)
       }
     })
@@ -149,11 +165,13 @@ export default function BuyerDashboard() {
     if (!primaryWallet || cancelingRef.current) return
     cancelingRef.current = true
     setCancelingId(counterOffer.id)
+    setCancelError(null)
     try {
       await cancelCounterOfferAction(primaryWallet, connection, counterOffer)
       setCounterOffers((prev) => prev.filter((co) => co.id !== counterOffer.id))
     } catch (err) {
       console.error('Failed to cancel counter offer', err)
+      setCancelError('Could not cancel that offer. Please try again.')
     } finally {
       cancelingRef.current = false
       setCancelingId(null)
@@ -213,7 +231,7 @@ export default function BuyerDashboard() {
                 className={`${s.tabBtn} ${activeTab === 'past' ? s.tabBtnActive : ''}`}
                 onClick={() => setActiveTab('past')}
               >
-                Past offers
+                Canceled offers
               </button>
             </div>
             {focusedOfferId && (
@@ -236,12 +254,15 @@ export default function BuyerDashboard() {
             (shownCounterOffers.length === 0 ? (
               <p className={s.offersEmpty}>No active offers.</p>
             ) : (
-              <CounterOffersList
-                counterOffers={shownCounterOffers}
-                onCancel={handleCancel}
-                cancelingId={cancelingId}
-                offerNameFor={(offerId) => offerNames[offerId] ?? ''}
-              />
+              <>
+                {cancelError && <p className={s.errorMessage}>{cancelError}</p>}
+                <CounterOffersList
+                  counterOffers={shownCounterOffers}
+                  onCancel={handleCancel}
+                  cancelingId={cancelingId}
+                  offerNameFor={(offerId) => offerNames[offerId] ?? ''}
+                />
+              </>
             ))}
 
           {activeTab === 'transactions' && (
@@ -249,6 +270,7 @@ export default function BuyerDashboard() {
               <TransactionsList
                 transactions={transactions.slice(0, 5)}
                 loading={!txLoaded}
+                walletLabel="Your wallet"
               />
               {txLoaded && txTotal > 5 && (
                 <div className={s.gridFooter}>
@@ -265,9 +287,9 @@ export default function BuyerDashboard() {
 
           {activeTab === 'past' && (
             shownPastOffers.length === 0 && pastLoaded ? (
-              <p className={s.offersEmpty}>No past offers.</p>
+              <p className={s.offersEmpty}>No canceled offers.</p>
             ) : (
-              <TransactionsList transactions={shownPastOffers} loading={!pastLoaded} />
+              <TransactionsList transactions={shownPastOffers} loading={!pastLoaded} walletLabel="Your wallet" />
             )
           )}
         </section>

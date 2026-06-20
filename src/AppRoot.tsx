@@ -44,10 +44,10 @@ export default function AppRoot() {
         // network validation is disabled.
         networkValidationMode: "never",
         walletConnectors: [
-          SolanaWalletConnectors,
           SuiWalletConnectors,
-          DynamicWaasSVMConnectors,
+          SolanaWalletConnectors,
           DynamicWaasSuiConnectors,
+          DynamicWaasSVMConnectors,
         ],
         walletsFilter: (wallets) =>
           FilterChain(authChain)(FilterWallets(ALLOWED_WALLET_KEYS)(wallets)),
