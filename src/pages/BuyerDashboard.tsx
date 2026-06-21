@@ -6,7 +6,7 @@ import {
   getItemsBought,
   getBuyerActiveCounterOffers,
 } from '../supabase/buyers/buyerData'
-import { getOffersByIds } from '../supabase/offers/offers'
+import { getOffersByIds, getOffer } from '../supabase/offers/offers'
 import { watchCounterOfferStatuses } from '../supabase/offers/getCounterOffers'
 import {
   getTransactionsByBuyer,
@@ -126,12 +126,28 @@ export default function BuyerDashboard() {
       // Don't inject a buy for a different item while the list is filtered.
       const focus = focusedOfferIdRef.current
       if (focus && row.offer_id !== focus) return
+      const cachedName = offerNamesRef.current[row.offer_id]
       setTransactions((prev) => {
         if (prev.some((t) => t.id === row.id)) return prev
-        const offer_name = offerNamesRef.current[row.offer_id] ?? ''
-        return [{ ...row, offer_name, source: 'buy' as const }, ...prev]
+        return [{ ...row, offer_name: cachedName ?? '', source: 'buy' as const }, ...prev]
       })
       setTxTotal((c) => c + 1)
+      // The realtime row carries no offer_name; if it isn't cached (e.g. a buy
+      // for an item not in this dashboard's offers), fetch it and patch the row
+      // so the name isn't left blank.
+      if (!cachedName) {
+        getOffer(row.offer_id)
+          .then((offer) => {
+            if (!offer?.name) return
+            offerNamesRef.current[row.offer_id] = offer.name
+            setTransactions((prev) =>
+              prev.map((t) =>
+                t.id === row.id ? { ...t, offer_name: offer.name } : t,
+              ),
+            )
+          })
+          .catch(console.error)
+      }
     })
   }, [walletAddress])
 
