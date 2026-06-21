@@ -65,6 +65,23 @@ export default function Pay() {
       : isSolanaWallet(primaryWallet));
   const exchangingRef = useRef(false);
 
+  // Force one fresh page load when opening a pay page. A client-side navigation
+  // leaves the wallet connector dead (it never fires its connection request), so
+  // we reload once on entry — re-registering the wallet so the connect/sign
+  // prompt works. Guarded by a per-offer sessionStorage flag so it reloads only
+  // once (the post-reload mount consumes the flag instead of looping).
+  useEffect(() => {
+    if (!offerId) return;
+    const KEY = "pay_reloaded";
+    if (sessionStorage.getItem(KEY) === offerId) {
+      sessionStorage.removeItem(KEY);
+      return;
+    }
+    sessionStorage.setItem(KEY, offerId);
+    const t = setTimeout(() => window.location.reload(), 5);
+    return () => clearTimeout(t);
+  }, [offerId]);
+
   // Dynamic only re-runs its wallet reconnect on a full page load. Arriving here
   // via a client-side navigation leaves a wallet-standard wallet (e.g. Slush)
   // with no active connection, so the lazy connect() inside signTransaction
