@@ -25,6 +25,7 @@ import InfoIcon from "../assets/icons/InfoIcon";
 import HomeIcon from "../assets/icons/HomeIcon";
 import s from "../styles/pay.module.css";
 
+const WALLET_RELOAD_KEY = "pay_wallet_reload";
 const RETURNABLE_FEE_LAMPORTS = config.arcPay.returnableFeeLamports;
 const TX_COST_LAMPORTS = config.arcPay.txCostLamports;
 const SUI_TX_COST_MIST = config.arcPay.suiTxCostMist;
@@ -64,24 +65,35 @@ export default function Pay() {
       ? isSuiWallet(primaryWallet)
       : isSolanaWallet(primaryWallet));
   const exchangingRef = useRef(false);
+  const buyingRef = useRef(false);
+  buyingRef.current = buying;
 
-  // Establish the wallet connection on page entry (prompts the connection
-  // request), so the connection is live before BUY and signTransaction doesn't
-  // throw "Wallet does not support standard:connect" on client-side navigation.
+  // When opening this page, force a live wallet connection (the sign prompt).
+  // Dynamic only registers the wallet on a full page load; arriving via
+  // client-side navigation leaves a dead placeholder wallet (getFeatures() ===
+  // null) that can never sign. A full reload re-runs Dynamic's init and fires
+  // the wallet connection request — what a manual refresh does. We give a fresh
+  // load a moment to register, and never reload mid-buy.
   useEffect(() => {
     if (!primaryWallet) return;
     let cancelled = false;
     (async () => {
-      try {
-        if (await primaryWallet.isConnected()) return;
-        const connector = primaryWallet.connector as {
-          connect?: () => Promise<void>;
-        };
-        if (!cancelled) await connector.connect?.();
-      } catch (err) {
-        if (!cancelled)
-          console.error("wallet connect on page entry failed", err);
+      await new Promise((r) => setTimeout(r, 1000));
+      if (cancelled || buyingRef.current) return;
+      const connector = primaryWallet.connector as unknown as {
+        getFeatures?: () => Record<string, unknown> | undefined;
+        getPrimaryAccount?: () => unknown;
+      };
+      const ready =
+        !!connector.getPrimaryAccount?.() ||
+        !!connector.getFeatures?.()?.["standard:connect"];
+      if (ready) {
+        sessionStorage.removeItem(WALLET_RELOAD_KEY);
+        return;
       }
+      if (sessionStorage.getItem(WALLET_RELOAD_KEY)) return; // already reloaded once
+      sessionStorage.setItem(WALLET_RELOAD_KEY, "1");
+      window.location.reload();
     })();
     return () => {
       cancelled = true;
