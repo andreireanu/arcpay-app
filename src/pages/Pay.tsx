@@ -65,6 +65,29 @@ export default function Pay() {
       : isSolanaWallet(primaryWallet));
   const exchangingRef = useRef(false);
 
+  // Establish the wallet connection on page entry (prompts the connection
+  // request), so the connection is live before BUY and signTransaction doesn't
+  // throw "Wallet does not support standard:connect" on client-side navigation.
+  useEffect(() => {
+    if (!primaryWallet) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (await primaryWallet.isConnected()) return;
+        const connector = primaryWallet.connector as {
+          connect?: () => Promise<void>;
+        };
+        if (!cancelled) await connector.connect?.();
+      } catch (err) {
+        if (!cancelled)
+          console.error("wallet connect on page entry failed", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryWallet]);
+
   useEscapeKey(counterOfferOpen, () => {
     setCounterOfferOpen(false);
     setCounterError(null);
