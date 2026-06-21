@@ -2,6 +2,7 @@ import { Transaction } from "@mysten/sui/transactions";
 import type { SuiWallet } from "@dynamic-labs/sui-core";
 import { CONFIG_ID, CLOCK_ID, target } from "../package";
 import { suiClient } from "../client";
+import { ensureWalletConnected } from "../ensureConnected";
 import { getBuyAuth } from "../../supabase/authorize/buyAuthorize";
 
 function uuidToBytes(uuid: string): number[] {
@@ -14,6 +15,7 @@ function uuidToBytes(uuid: string): number[] {
 }
 
 export async function buy(wallet: SuiWallet, offerId: string): Promise<string> {
+  await ensureWalletConnected(wallet);
   const auth = await getBuyAuth(offerId, wallet.address);
   const total = BigInt(auth.sellerAmount) + BigInt(auth.feeAmount);
 
