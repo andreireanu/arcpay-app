@@ -68,27 +68,17 @@ export default function Pay() {
   // Dynamic only re-runs its wallet reconnect on a full page load. Arriving here
   // via a client-side navigation leaves a wallet-standard wallet (e.g. Slush)
   // with no active connection, so the lazy connect() inside signTransaction
-  // throws "Wallet does not support standard:connect" at BUY time. Re-establish
-  // the connection on entry — what a refresh does — so the first action signs
-  // straight away. isConnected() runs a silent reconnect (never throws); if the
-  // origin still isn't connected we trigger the connector's connect() to prompt.
+  // throws "Wallet does not support standard:connect" at BUY time. isConnected()
+  // runs a *silent* reconnect that re-authorizes a previously approved origin
+  // with no popup and sets the primary account, so BUY's own connect() becomes a
+  // no-op and the buyer is only prompted for the transaction signature.
   useEffect(() => {
     if (!primaryWallet) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        if (await primaryWallet.isConnected()) return;
-        const connector = primaryWallet.connector as {
-          connect?: () => Promise<void>;
-        };
-        if (!cancelled) await connector.connect?.();
-      } catch (err) {
-        if (!cancelled) console.error("wallet reconnect on page entry failed", err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    primaryWallet
+      .isConnected()
+      .catch((err) =>
+        console.error("wallet reconnect on page entry failed", err),
+      );
   }, [primaryWallet]);
 
   useEscapeKey(counterOfferOpen, () => {
