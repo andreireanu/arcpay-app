@@ -11,6 +11,7 @@ import {
   watchBuyerCounterOfferInsert,
 } from "../supabase/offers/getCounterOffers";
 import { registerBuyer } from "../supabase/buyers/buyers";
+import { connectLiveSuiWallet } from "../sui/liveWallet";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { CounterOffer } from "../types/counterOffer";
@@ -25,7 +26,6 @@ import InfoIcon from "../assets/icons/InfoIcon";
 import HomeIcon from "../assets/icons/HomeIcon";
 import s from "../styles/pay.module.css";
 
-const WALLET_RELOAD_KEY = "pay_wallet_reload";
 const RETURNABLE_FEE_LAMPORTS = config.arcPay.returnableFeeLamports;
 const TX_COST_LAMPORTS = config.arcPay.txCostLamports;
 const SUI_TX_COST_MIST = config.arcPay.suiTxCostMist;
@@ -65,39 +65,18 @@ export default function Pay() {
       ? isSuiWallet(primaryWallet)
       : isSolanaWallet(primaryWallet));
   const exchangingRef = useRef(false);
-  const buyingRef = useRef(false);
-  buyingRef.current = buying;
 
-  // When opening this page, force a live wallet connection (the sign prompt).
-  // Dynamic only registers the wallet on a full page load; arriving via
-  // client-side navigation leaves a dead placeholder wallet (getFeatures() ===
-  // null) that can never sign. A full reload re-runs Dynamic's init and fires
-  // the wallet connection request — what a manual refresh does. We give a fresh
-  // load a moment to register, and never reload mid-buy.
+  // When opening this page, connect the live wallet directly via the
+  // wallet-standard registry (this shows the wallet's connection request — the
+  // "sign on open"). Dynamic's own connector is a dead placeholder after a
+  // client-side navigation, but the extension wallet is still registered with
+  // the page, so we talk to it directly — no page reload. No-op for embedded
+  // wallets (handled by Dynamic at buy time).
   useEffect(() => {
     if (!primaryWallet) return;
-    let cancelled = false;
-    (async () => {
-      await new Promise((r) => setTimeout(r, 1000));
-      if (cancelled || buyingRef.current) return;
-      const connector = primaryWallet.connector as unknown as {
-        getFeatures?: () => Record<string, unknown> | undefined;
-        getPrimaryAccount?: () => unknown;
-      };
-      const ready =
-        !!connector.getPrimaryAccount?.() ||
-        !!connector.getFeatures?.()?.["standard:connect"];
-      if (ready) {
-        sessionStorage.removeItem(WALLET_RELOAD_KEY);
-        return;
-      }
-      if (sessionStorage.getItem(WALLET_RELOAD_KEY)) return; // already reloaded once
-      sessionStorage.setItem(WALLET_RELOAD_KEY, "1");
-      window.location.reload();
-    })();
-    return () => {
-      cancelled = true;
-    };
+    connectLiveSuiWallet(primaryWallet.address).catch((err) =>
+      console.error("live wallet connect on page entry failed", err),
+    );
   }, [primaryWallet]);
 
   useEscapeKey(counterOfferOpen, () => {
