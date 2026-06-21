@@ -24,18 +24,38 @@ interface StandardWallet {
   features: Record<string, unknown>;
 }
 
-function findSuiWallet(address?: string): StandardWallet | undefined {
+function nameMatches(a: string, b: string): boolean {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  return x === y || x.includes(y) || y.includes(x);
+}
+
+// Finds the live registry wallet for the user's *connected* wallet. Matching by
+// the connected wallet's name (not just "first Sui wallet") is essential when
+// several Sui wallets are installed — otherwise we'd prompt Phantom instead of
+// the Slush the user is actually signed in with. Returns undefined rather than
+// guessing a different wallet.
+function findSuiWallet(
+  address?: string,
+  walletName?: string,
+): StandardWallet | undefined {
   const wallets = getWallets().get() as unknown as StandardWallet[];
   const sui = wallets.filter(
     (w) =>
       "sui:signTransaction" in w.features ||
       "sui:signTransactionBlock" in w.features,
   );
+
+  // 1. A wallet already holding this exact account is unambiguous.
   if (address) {
     const owned = sui.find((w) => w.accounts.some((a) => a.address === address));
     if (owned) return owned;
   }
-  return sui[0];
+  // 2. Otherwise match the connected wallet by name (e.g. "slushsui" → "Slush").
+  if (walletName) {
+    return sui.find((w) => nameMatches(w.name, walletName));
+  }
+  return undefined;
 }
 
 // Returns the account to sign with, connecting the live wallet first if needed.
@@ -63,14 +83,18 @@ async function ensureLiveConnection(
 
 // Prompt the live wallet's connection request on page entry (the sign-on-open),
 // bypassing Dynamic's dead connector. No-op when there is no extension wallet.
-export async function connectLiveSuiWallet(address?: string): Promise<void> {
-  const wallet = findSuiWallet(address);
+export async function connectLiveSuiWallet(
+  address?: string,
+  walletName?: string,
+): Promise<void> {
+  const wallet = findSuiWallet(address, walletName);
   if (!wallet) return;
   await ensureLiveConnection(wallet, address);
 }
 
 interface DynamicSigner {
   address: string;
+  connector?: { name?: string };
   signTransaction: (
     t: Transaction,
   ) => Promise<{ bytes: string; signature: string }>;
@@ -82,7 +106,10 @@ export async function signSuiTransaction(
   dynamicWallet: DynamicSigner,
   transaction: Transaction,
 ): Promise<{ bytes: string; signature: string }> {
-  const wallet = findSuiWallet(dynamicWallet.address);
+  const wallet = findSuiWallet(
+    dynamicWallet.address,
+    dynamicWallet.connector?.name,
+  );
   if (!wallet) return dynamicWallet.signTransaction(transaction);
 
   const account = await ensureLiveConnection(wallet, dynamicWallet.address);

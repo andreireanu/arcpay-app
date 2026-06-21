@@ -74,7 +74,9 @@ export default function Pay() {
   // wallets (handled by Dynamic at buy time).
   useEffect(() => {
     if (!primaryWallet) return;
-    connectLiveSuiWallet(primaryWallet.address).catch((err) =>
+    const w = primaryWallet as { key?: string; connector?: { name?: string } };
+    const walletName = w.connector?.name ?? w.key;
+    connectLiveSuiWallet(primaryWallet.address, walletName).catch((err) =>
       console.error("live wallet connect on page entry failed", err),
     );
   }, [primaryWallet]);
