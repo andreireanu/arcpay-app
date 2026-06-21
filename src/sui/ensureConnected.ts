@@ -7,13 +7,13 @@ import type { SuiWallet } from "@dynamic-labs/sui-core";
 // not support standard:connect". The live wallet appears a short moment later
 // (the "wait a bit and it works" window the user observed).
 //
-// This waits for the wallet to actually become ready, then connects once, so the
-// subsequent signTransaction (which calls connect() internally) is a no-op and
-// the user is only prompted for the transaction signature.
+// This waits for the wallet to actually become ready — it does NOT connect
+// itself. The connect is left to signTransaction's own internal connect() call,
+// so the buyer sees exactly one connection prompt (when the wallet is ready)
+// followed by the transaction prompt, instead of a double connection request.
 interface RawConnector {
   getFeatures?: () => Record<string, unknown> | undefined;
   getPrimaryAccount?: () => unknown;
-  connect?: (opts?: { silent?: boolean }) => Promise<void>;
 }
 
 const READY_TIMEOUT_MS = 8000;
@@ -22,29 +22,22 @@ const POLL_INTERVAL_MS = 200;
 export async function ensureWalletConnected(wallet: SuiWallet): Promise<void> {
   const connector = wallet.connector as unknown as RawConnector;
 
-  // Already connected — connect() would be a no-op anyway.
+  // Already connected — signTransaction's connect() will be a no-op.
   if (connector.getPrimaryAccount?.()) return;
 
-  // Poll until the live wallet (with its standard:connect feature) is injected.
+  // Wait until the live wallet (with its standard:connect feature) is injected,
+  // then return and let signTransaction perform the single connect itself.
   const deadline = Date.now() + READY_TIMEOUT_MS;
-  let hasFeature = false;
   while (Date.now() < deadline) {
     const features = connector.getFeatures?.();
-    if (features && "standard:connect" in features) {
-      hasFeature = true;
-      break;
-    }
+    if (features && "standard:connect" in features) return;
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
 
-  if (!hasFeature) {
-    console.warn("[ensureWalletConnected] standard:connect never appeared", {
-      connector: connector.constructor?.name,
-      features: connector.getFeatures?.()
-        ? Object.keys(connector.getFeatures()!)
-        : null,
-    });
-  }
-
-  await connector.connect?.();
+  console.warn("[ensureWalletConnected] standard:connect never appeared", {
+    connector: connector.constructor?.name,
+    features: connector.getFeatures?.()
+      ? Object.keys(connector.getFeatures()!)
+      : null,
+  });
 }
