@@ -11,6 +11,7 @@ import {
   watchBuyerCounterOfferInsert,
 } from "../supabase/offers/getCounterOffers";
 import { registerBuyer } from "../supabase/buyers/buyers";
+import { waitForWalletReady } from "../sui/ensureConnected";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { CounterOffer } from "../types/counterOffer";
@@ -25,6 +26,7 @@ import InfoIcon from "../assets/icons/InfoIcon";
 import HomeIcon from "../assets/icons/HomeIcon";
 import s from "../styles/pay.module.css";
 
+const WALLET_RELOAD_KEY = "pay_wallet_reload";
 const RETURNABLE_FEE_LAMPORTS = config.arcPay.returnableFeeLamports;
 const TX_COST_LAMPORTS = config.arcPay.txCostLamports;
 const SUI_TX_COST_MIST = config.arcPay.suiTxCostMist;
@@ -65,20 +67,29 @@ export default function Pay() {
       : isSolanaWallet(primaryWallet));
   const exchangingRef = useRef(false);
 
-  // Dynamic only re-runs its wallet reconnect on a full page load. Arriving here
-  // via a client-side navigation leaves a wallet-standard wallet (e.g. Slush)
-  // with no active connection, so the lazy connect() inside signTransaction
-  // throws "Wallet does not support standard:connect" at BUY time. isConnected()
-  // runs a *silent* reconnect that re-authorizes a previously approved origin
-  // with no popup and sets the primary account, so BUY's own connect() becomes a
-  // no-op and the buyer is only prompted for the transaction signature.
+  // Dynamic only registers the wallet on a full page load. Reaching this page via
+  // client-side navigation can leave the connector holding a dead placeholder
+  // wallet (getFeatures() === null) that never recovers, so BUY throws "Wallet
+  // does not support standard:connect". The only reliable recovery is a full
+  // reload (the manual refresh that works). Detect the dead state on entry and
+  // reload once, guarded against a reload loop.
   useEffect(() => {
     if (!primaryWallet) return;
-    primaryWallet
-      .isConnected()
-      .catch((err) =>
-        console.error("wallet reconnect on page entry failed", err),
-      );
+    let cancelled = false;
+    (async () => {
+      const ready = await waitForWalletReady(primaryWallet, 2500);
+      if (cancelled) return;
+      if (ready) {
+        sessionStorage.removeItem(WALLET_RELOAD_KEY);
+        return;
+      }
+      if (sessionStorage.getItem(WALLET_RELOAD_KEY)) return; // already reloaded once
+      sessionStorage.setItem(WALLET_RELOAD_KEY, "1");
+      window.location.reload();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [primaryWallet]);
 
   useEscapeKey(counterOfferOpen, () => {
