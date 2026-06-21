@@ -92,6 +92,7 @@ Deno.serve(async (req) => {
         seller_amount: sellerAmount,
         fee_amount: feeAmount,
         quantity: 1,
+        chain: "solana",
       });
       if (txError) {
         // code 23505 = unique_violation: Helius delivered this webhook twice, safe to ignore.

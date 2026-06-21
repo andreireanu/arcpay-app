@@ -113,7 +113,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 160px;
+    min-width: 220px;
     z-index: 100;
 }
 
@@ -138,6 +138,134 @@
 .walletDropdownItem:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.walletChainTag {
+    background: rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 6px;
+}
+
+.walletChainLogo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Chain brand wordmarks shown on offer cards / price lines. Both render at the
+   same overall height: Solana's bare wordmark is 18px tall; Sui's wordmark is
+   smaller (12px) but its chip's vertical padding brings the chip to the same
+   18px, so the two read as the same size despite different aspect ratios. */
+.chainLogoImg {
+    height: 18px;
+    width: auto;
+    display: block;
+}
+
+.chainLogoSui {
+    height: 12px;
+    background: #6fbcf0;
+    border-radius: 5px;
+    padding: 3px 7px;
+    box-sizing: content-box;
+}
+
+.walletChainLogoImg {
+    height: 18px;
+    width: auto;
+    display: block;
+}
+
+/* Sui's white wordmark sits on a light-blue brand chip. */
+.walletChainLogoSui {
+    background: #6fbcf0;
+    border-radius: 6px;
+    padding: 4px 8px;
+    box-sizing: content-box;
+}
+
+.walletDropdownLabel {
+    padding: 6px 12px 2px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-muted);
+}
+
+.walletChainRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.walletChainRow:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.walletChainRowActive {
+    background: rgba(167, 139, 250, 0.12);
+}
+
+.walletChainRowActive:hover {
+    background: rgba(167, 139, 250, 0.18);
+}
+
+.walletChainInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.walletChainName {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-white);
+}
+
+.walletChainCheck {
+    color: #a78bfa;
+    font-size: 12px;
+}
+
+.walletChainAddr {
+    font-size: 12px;
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.walletChainCopy {
+    background: none;
+    border: none;
+    color: var(--color-muted);
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: background 0.1s, color 0.1s;
+}
+
+.walletChainCopy:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-white);
+}
+
+.walletDropdownDivider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 4px 0;
 }
 
 .walletButton {
@@ -275,6 +403,13 @@
     font-size: 14px;
     line-height: 20px;
     color: var(--color-muted);
+}
+
+.errorMessage {
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-error);
 }
 
 .offersGrid {
@@ -434,6 +569,7 @@
 .filterChip {
     display: inline-flex;
     align-items: center;
+    margin-left: 16px;
     gap: 8px;
     background: #1a0e28;
     border: 1px solid #a78bfa55;
@@ -634,6 +770,46 @@
     gap: 12px;
 }
 
+/* Right cluster of the name row: the auto-accept button sits to the left of the
+   status badge. */
+.offerDetailStatusGroup {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.autoAcceptBtn {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    padding: 6px 14px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.autoAcceptBtn:hover {
+    opacity: 0.8;
+}
+
+/* Smaller pill to match the dense dashboard cards' badges/pills (12px). */
+.autoAcceptBtnCompact {
+    padding: 5px 12px;
+    font-size: 12px;
+    line-height: 16px;
+}
+
+/* Armed (rule set and not yet fired) — green to read as active. */
+.autoAcceptBtnOn {
+    border-color: #00b54b;
+    color: #00b54b;
+}
+
 .offerDetailThumb {
     width: 168px;
     height: 168px;
@@ -828,6 +1004,40 @@
     line-height: 28px;
     letter-spacing: -0.3px;
     color: var(--color-white);
+}
+
+.modalDescription {
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted);
+}
+
+.modalHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.modalClose {
+    background: transparent;
+    border: none;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.modalClose:hover:not(:disabled) {
+    color: var(--color-white);
+}
+
+.modalClose:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 
 .modalFields {
@@ -1163,9 +1373,19 @@
     color: #a78bfa;
 }
 
+.coListSourceAuto {
+    background: #06262e;
+    color: #22d3ee;
+}
+
 .statusConfirmed {
     background: #01230f;
     color: #00b54b;
+}
+
+.statusCanceled {
+    background: #2a0f0f;
+    color: #f87171;
 }
 
 .coListActions {
@@ -1324,34 +1544,37 @@
 .selectionSummary {
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 16px;
     background: #0d1f14;
     border: 1px solid #00b54b33;
     border-radius: 24px;
-    padding: 20px 28px;
+    /* Match the rows' horizontal padding (24px) so the banner's left/right edges
+       line up with the columns + controls beneath it. */
+    padding: 18px 24px;
+    /* On a narrow viewport the actions drop below the stats instead of
+       overflowing the card. */
+    flex-wrap: wrap;
 }
 
 .selectionSummaryStats {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 24px;
+    /* Comfortable spacing between the three stats, packed at the left. */
+    gap: 40px;
 }
 
 .selectionSummaryItem {
-    flex: 1;
-    min-width: 0;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     gap: 2px;
 }
 
 .selectionSummaryItemFirst {
-    /* Keep the content centered within the column, but nudge it left of the
-       column's true center so it doesn't read as floating in empty space. */
-    padding-right: 64px;
+    /* Left-packed; no special treatment for the first item. */
 }
 
 .selectionSummarySep {
@@ -1386,6 +1609,8 @@
     display: flex;
     gap: 8px;
     flex-shrink: 0;
+    /* Pin to the right edge so the buttons line up with each row's controls. */
+    margin-left: auto;
 }
 
 .summaryHideButton,
@@ -1418,6 +1643,37 @@
 .summaryAcceptButton:disabled {
     opacity: 0.35;
     cursor: default;
+}
+
+/* Squeeze the summary into a still-usable form on narrow viewports: tighter
+   spacing, smaller numbers, and buttons that shrink instead of forcing overflow. */
+@media (max-width: 860px) {
+    .selectionSummary {
+        gap: 12px;
+        padding: 14px 16px;
+    }
+
+    .selectionSummaryStats {
+        gap: 16px;
+    }
+
+    /* Drop the fixed column width so the stats pack to content and stay visible
+       (column alignment is a wide-viewport nicety). */
+    .selectionSummaryItem {
+        flex: 0 0 auto;
+    }
+
+    .selectionSummaryValue {
+        font-size: 15px;
+        line-height: 22px;
+    }
+
+    .summaryHideButton,
+    .summaryAcceptButton {
+        min-width: 0;
+        padding: 8px 14px;
+        font-size: 13px;
+    }
 }
 
 .summaryHideButton:not(:disabled):hover,

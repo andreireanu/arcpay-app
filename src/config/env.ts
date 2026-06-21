@@ -8,6 +8,11 @@ export const config = {
     network: import.meta.env.VITE_SOLANA_NETWORK as string,
     programId: import.meta.env.VITE_PROGRAM_ID as string,
   },
+  sui: {
+    network: import.meta.env.VITE_SUI_NETWORK as string,
+    packageId: import.meta.env.VITE_SUI_PACKAGE_ID as string,
+    configId: import.meta.env.VITE_SUI_CONFIG_ID as string,
+  },
   dynamic: {
     environmentId: import.meta.env.VITE_DYNAMIC_ENV_ID as string,
   },
@@ -19,5 +24,7 @@ export const config = {
     ),
     // Solana network transaction cost added to the total the buyer is charged.
     txCostLamports: Number(import.meta.env.VITE_TX_COST_LAMPORTS ?? 5_000),
+    // Sui network/gas cost added to the buyer's total (MIST).
+    suiTxCostMist: Number(import.meta.env.VITE_SUI_TX_COST_MIST ?? 2_197_000),
   },
 };

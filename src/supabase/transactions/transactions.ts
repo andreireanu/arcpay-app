@@ -16,14 +16,20 @@ export async function getTransactionsBySeller(
   sellerWallet: string,
   page = 0,
   pageSize = 10,
+  offerId?: string,
 ): Promise<TransactionPage> {
   const from = page * pageSize
   const to = from + pageSize - 1
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('qr_seller_transactions')
     .select('*', { count: 'exact' })
     .eq('seller_wallet', sellerWallet)
+    // Sellers see only settled rows; canceled offers are buyer-side history.
+    .in('status', ['confirmed', 'auto_confirmed'])
+  if (offerId) query = query.eq('offer_id', offerId)
+
+  const { data, error, count } = await query
     .order('created_at', { ascending: false })
     .range(from, to)
 
@@ -55,6 +61,8 @@ export async function getTransactionsByBuyer(
     .from('qr_seller_transactions')
     .select('*', { count: 'exact' })
     .eq('buyer_wallet', buyerWallet)
+    // Purchases only; canceled offers live in the buyer's "Canceled offers" tab.
+    .in('status', ['confirmed', 'auto_confirmed'])
   if (offerId) query = query.eq('offer_id', offerId)
 
   const { data, error, count } = await query
@@ -67,6 +75,24 @@ export async function getTransactionsByBuyer(
     transactions: (data ?? []) as unknown as Transaction[],
     total: count ?? 0,
   }
+}
+
+// The buyer's canceled counter offers (their "Canceled offers" tab) — offers that
+// ended without a purchase, by either party. Reads the same view filtered to the
+// canceled statuses, scoped to buyer_wallet for the same reason as above.
+export async function getCanceledOffersByBuyer(
+  buyerWallet: string,
+): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('qr_seller_transactions')
+    .select('*')
+    .eq('buyer_wallet', buyerWallet)
+    .in('status', ['buyer_canceled', 'seller_canceled'])
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error) throw error
+  return (data ?? []) as unknown as Transaction[]
 }
 
 // Raw qr_transactions row as delivered by Realtime (no qr_offers join, no source
@@ -109,12 +135,14 @@ export function watchBuyerTransactions(
 }
 
 // Watch for counter offers settling on a given offer (status flips to
-// `confirmed` when the settle webhook processes the OfferBought event). These
-// become rows in the seller's transactions list, mirroring watchNewTransactions
-// for buys. RLS scopes delivery to the seller's own offers.
+// `confirmed` — or `auto_confirmed` when the auto-accept rule settled it — once
+// the settle webhook processes the OfferBought event). These become rows in the
+// seller's transactions list, mirroring watchNewTransactions for buys. RLS
+// scopes delivery to the seller's own offers. The `source` is derived from the
+// status so callers don't hardcode it (matches the qr_seller_transactions view).
 export function watchSettledCounterOffers(
   offerId: string,
-  onSettled: (row: TransactionRow) => void,
+  onSettled: (row: TransactionRow & { source: 'counter_offer' | 'auto_confirmed' }) => void,
 ): () => void {
   const channel = supabase
     .channel(`counter-offer-settled-${offerId}`)
@@ -126,11 +154,12 @@ export function watchSettledCounterOffers(
           status: string
           confirmed_at: string | null
         }
-        if (row.status !== 'confirmed') return
+        if (row.status !== 'confirmed' && row.status !== 'auto_confirmed') return
+        const source = row.status === 'auto_confirmed' ? 'auto_confirmed' : 'counter_offer'
         // For a counter offer the execution time is confirmed_at (when this
         // settle flipped it), not created_at (when the buyer placed it). Mirror
         // the qr_seller_transactions view so live rows match a reload.
-        onSettled({ ...row, created_at: row.confirmed_at ?? row.created_at })
+        onSettled({ ...row, source, created_at: row.confirmed_at ?? row.created_at })
       },
     )
     .subscribe()

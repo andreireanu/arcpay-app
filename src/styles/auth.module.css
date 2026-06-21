@@ -113,6 +113,70 @@
   cursor: not-allowed;
 }
 
+.chainButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--color-yellow);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 14px 20px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--color-black);
+  width: 100%;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.chainButtonSecondary {
+  composes: chainButton;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-white);
+}
+
+/* Sui-branded primary button — the white wordmark sits on Sui's brand blue. */
+.chainButtonSui {
+  composes: chainButton;
+  background: #4da2ff;
+  color: #fff;
+}
+
+.suiWordmark {
+  height: 22px;
+  width: auto;
+  display: inline-block;
+}
+
+.solanaWordmark {
+  height: 14px;
+  width: auto;
+  display: inline-block;
+}
+
+.chainButton:hover,
+.chainButtonSecondary:hover,
+.chainButtonSui:hover {
+  opacity: 0.88;
+}
+
+.chainButton:disabled,
+.chainButtonSecondary:disabled,
+.chainButtonSui:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chainButtonIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .footer {
   display: flex;
   gap: 4px;

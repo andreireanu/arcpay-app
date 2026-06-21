@@ -51,7 +51,11 @@ export default function Transactions() {
       <main className={s.content}>
         <section className={s.bottomPanel}>
           <h2 className={s.sectionTitle}>Transactions</h2>
-          <TransactionsList transactions={transactions} loading={!loaded} />
+          <TransactionsList
+            transactions={transactions}
+            loading={!loaded}
+            walletLabel={role === 'buyer' ? 'Your wallet' : 'From wallet'}
+          />
           {loaded && total > 0 && (
             <div className={s.pager}>
               <span className={s.pagerInfo}>

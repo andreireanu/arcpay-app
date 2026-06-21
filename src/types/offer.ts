@@ -9,5 +9,6 @@ export interface Offer {
   quantity: number;
   quantity_sold: number;
   unlimited: boolean;
+  chain: "solana" | "sui";
   created_at: string;
 }

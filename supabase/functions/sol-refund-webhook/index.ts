@@ -58,18 +58,21 @@ Deno.serve(async (req) => {
       if (bytes.length < 8) continue;
       const disc = bytes.slice(0, 8);
 
-      // OfferBought: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 seller_amount + 8 fee_amount + 8 timestamp = 112 bytes
-      if (bytes.length >= 112 && arraysEqual(disc, boughtDisc)) {
+      // OfferBought: 8 disc + 16 uuid + 32 buyer + 32 seller + 8 seller_amount + 8 fee_amount + 1 auto + 8 timestamp = 113 bytes
+      if (bytes.length >= 113 && arraysEqual(disc, boughtDisc)) {
         const ephemeralUuid = bytesToUuid(bytes.slice(8, 24));
-        console.log("offer_bought event", ephemeralUuid);
+        // auto sits before the timestamp (offset 104), matching the event struct field order.
+        const auto = bytes[104] === 1;
+        const status = auto ? "auto_confirmed" : "confirmed";
+        console.log("offer_bought event", ephemeralUuid, "auto", auto);
 
         // Conditional flip = exactly-once: a duplicate delivery matches 0 rows.
         const { data: settled, error } = await supabase
           .from("qr_counteroffers")
           .update({
-            status: "confirmed",
+            status,
             confirmed_at: new Date().toISOString(),
-            rent_returned: true,
+            returned: true,
             settle_tx_signature: txSignature,
           })
           .eq("ephemeral_id", ephemeralUuid)
@@ -119,12 +122,16 @@ Deno.serve(async (req) => {
 
         const { error } = await supabase
           .from("qr_counteroffers")
-          .update({ rent_returned: true, settle_tx_signature: txSignature })
+          .update({
+            returned: true,
+            settle_tx_signature: txSignature,
+            confirmed_at: new Date().toISOString(),
+          })
           .eq("ephemeral_id", ephemeralUuid);
 
         if (error)
-          console.error("rent_returned update error", ephemeralUuid, error);
-        else console.log("rent_returned set for ephemeral", ephemeralUuid);
+          console.error("returned update error", ephemeralUuid, error);
+        else console.log("returned set for ephemeral", ephemeralUuid);
       }
     }
   }

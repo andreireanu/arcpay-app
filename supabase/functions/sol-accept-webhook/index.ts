@@ -136,7 +136,7 @@ Deno.serve(async (req) => {
         fetch,
       });
       const backendKeypair = Keypair.fromSecretKey(
-        new Uint8Array(JSON.parse(Deno.env.get("BACKEND_KEYPAIR")!)),
+        new Uint8Array(JSON.parse(Deno.env.get("SOL_BACKEND_KEYPAIR")!)),
       );
       const programId = new PublicKey(Deno.env.get("PROGRAM_ID")!);
 

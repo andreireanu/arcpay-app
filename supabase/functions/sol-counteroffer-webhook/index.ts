@@ -1,4 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1";
+import { sendAdminSettles } from "../_sol-shared/sendAdminSettles.ts";
+import {
+  evaluateAutoAccept,
+  markAutoAcceptTriggered,
+} from "../_shared/autoAccept.ts";
 
 async function offerCreatedDiscriminator(): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(
@@ -118,6 +124,9 @@ Deno.serve(async (req) => {
           tx_signature: txSignature,
           seller_amount: sellerAmount,
           fee_amount: feeAmount,
+          // This is the Solana counter-offer webhook, so the counter offer is
+          // always on Solana.
+          chain: "solana",
         });
 
       if (insertError) {
@@ -135,8 +144,60 @@ Deno.serve(async (req) => {
 
       if (deleteError) console.error("qr_ephemeral delete error", deleteError);
       else console.log("deleted ephemeral", ephemeralUuid, "offer", ephemeral.offer_id);
+
+      await runAutoAccept(supabase, ephemeral.offer_id);
     }
   }
 
   return new Response("ok", { status: 200 });
 });
+
+// Evaluate the seller's auto-accept rule for this offer and, if met, settle the
+// best counter offers to the seller via admin_settle_offer (to_seller=true) —
+// the same settle path the accept flow uses, just triggered by the stored rule
+// instead of an on-chain consent event.
+async function runAutoAccept(
+  supabase: ReturnType<typeof createClient>,
+  offerId: string,
+): Promise<void> {
+  const decision = await evaluateAutoAccept(supabase, offerId);
+  if (!decision) return;
+
+  const connection = new Connection(Deno.env.get("SOLANA_RPC_URL")!, {
+    commitment: "confirmed",
+    fetch,
+  });
+  const backendKeypair = Keypair.fromSecretKey(
+    new Uint8Array(JSON.parse(Deno.env.get("SOL_BACKEND_KEYPAIR")!)),
+  );
+  const programId = new PublicKey(Deno.env.get("PROGRAM_ID")!);
+
+  const { signatures, dropped, errors } = await sendAdminSettles(
+    connection,
+    backendKeypair,
+    programId,
+    decision.rows.map((co) => ({
+      ephemeralId: co.ephemeral_id,
+      buyerWallet: co.buyer_wallet,
+      sellerWallet: decision.sellerWallet,
+      toSeller: true,
+      feeAmount: co.fee_amount,
+      auto: true,
+    })),
+  );
+
+  if (signatures.length) console.log("auto-accept settled", offerId, signatures);
+  if (dropped.length)
+    console.warn(
+      "auto-accept records already consumed, skipped",
+      offerId,
+      dropped.map((d) => d.ephemeralId),
+    );
+  if (errors.length) {
+    // Leave the rule armed so the next counter offer re-runs the driver.
+    console.error("auto-accept errors", offerId, errors);
+    return;
+  }
+
+  await markAutoAcceptTriggered(supabase, offerId, decision.achievedAvg);
+}

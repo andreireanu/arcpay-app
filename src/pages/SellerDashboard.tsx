@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
-import { isSolanaWallet } from '@dynamic-labs/solana-core'
 import { useConnection } from '@solana/wallet-adapter-react'
-import { PublicKey } from '@solana/web3.js'
 import { getOffersByWallet, watchOfferStatuses } from '../supabase/offers/offers'
 import {
   getCounterOffersBySeller,
@@ -13,7 +11,7 @@ import {
   watchCounterOfferStatuses,
 } from '../supabase/offers/getCounterOffers'
 import { getTransactionsBySeller, watchNewTransactions, watchSettledCounterOffers } from '../supabase/transactions/transactions'
-import { acceptCounter } from '../solana/instructions/acceptCounter'
+import { acceptCounterOffers } from '../dispatcher/actions'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import type { Transaction } from '../types/transaction'
@@ -21,6 +19,7 @@ import AppHeader from '../components/AppHeader'
 import ProductsGrid from '../components/ProductsGrid'
 import TransactionsList from '../components/TransactionsList'
 import CounterOffersList from '../components/CounterOffersList'
+import AlertModal from '../components/AlertModal'
 import s from '../styles/dashboard.module.css'
 
 export default function SellerDashboard() {
@@ -30,6 +29,11 @@ export default function SellerDashboard() {
   const walletAddress = primaryWallet?.address
 
   const [offers, setOffers] = useState<Offer[]>([])
+  // Latest offers for realtime callbacks that resolve an offer name, so the
+  // subscriptions below can key on the id set (not the array reference) without
+  // capturing a stale list.
+  const offersRef = useRef(offers)
+  offersRef.current = offers
 
   const [activeTab, setActiveTab] = useState<'counteroffers' | 'transactions'>('counteroffers')
   const [allCounterOffers, setAllCounterOffers] = useState<CounterOffer[]>([])
@@ -38,6 +42,7 @@ export default function SellerDashboard() {
   const [txTotal, setTxTotal] = useState(0)
   const [txLoaded, setTxLoaded] = useState(false)
   const [accepting, setAccepting] = useState(false)
+  const [acceptError, setAcceptError] = useState<string | null>(null)
   const acceptingRef = useRef(false)
 
   useEffect(() => {
@@ -59,42 +64,45 @@ export default function SellerDashboard() {
   }, [ownOfferIdKey])
 
   useEffect(() => {
-    if (offers.length === 0) return
-    const unsubs = offers.map((o) =>
-      watchNewCounterOffers(o.id, (co) => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    const unsubs = ids.map((id) =>
+      watchNewCounterOffers(id, (co) => {
         setAllCounterOffers((prev) => [co, ...prev])
       }),
     )
     return () => unsubs.forEach((u) => u())
-  }, [offers])
+  }, [ownOfferIdKey])
 
   useEffect(() => {
-    if (offers.length === 0) return
-    const unsubs = offers.map((o) =>
-      watchNewTransactions(o.id, (row) => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    const unsubs = ids.map((id) =>
+      watchNewTransactions(id, (row) => {
         setTransactions((prev) => {
           if (prev.some((t) => t.id === row.id)) return prev
-          const offer_name = offers.find((of) => of.id === row.offer_id)?.name ?? ''
+          const offer_name = offersRef.current.find((of) => of.id === row.offer_id)?.name ?? ''
           return [{ ...row, offer_name, source: 'buy' as const }, ...prev]
         })
       }),
     )
     return () => unsubs.forEach((u) => u())
-  }, [offers])
+  }, [ownOfferIdKey])
 
   useEffect(() => {
-    if (offers.length === 0) return
-    const unsubs = offers.map((o) =>
-      watchSettledCounterOffers(o.id, (row) => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    const unsubs = ids.map((id) =>
+      watchSettledCounterOffers(id, (row) => {
         setTransactions((prev) => {
           if (prev.some((t) => t.id === row.id)) return prev
-          const offer_name = offers.find((of) => of.id === row.offer_id)?.name ?? ''
-          return [{ ...row, offer_name, source: 'counter_offer' as const }, ...prev]
+          const offer_name = offersRef.current.find((of) => of.id === row.offer_id)?.name ?? ''
+          return [{ ...row, offer_name }, ...prev]
         })
       }),
     )
     return () => unsubs.forEach((u) => u())
-  }, [offers])
+  }, [ownOfferIdKey])
 
   const coIdKey = allCounterOffers.map((co) => co.id).join(',')
   useEffect(() => {
@@ -103,6 +111,7 @@ export default function SellerDashboard() {
     return watchCounterOfferStatuses(ids, (id, status) => {
       if (
         status === 'confirmed' ||
+        status === 'auto_confirmed' ||
         status === 'buyer_canceled' ||
         status === 'seller_canceled'
       ) {
@@ -116,11 +125,12 @@ export default function SellerDashboard() {
   }, [coIdKey])
 
   useEffect(() => {
-    if (offers.length === 0) return
-    return watchOfferStatuses(offers.map((o) => o.id), (offerId, update) => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    return watchOfferStatuses(ids, (offerId, update) => {
       setOffers((prev) => prev.map((o) => (o.id === offerId ? { ...o, ...update } : o)))
     })
-  }, [offers])
+  }, [ownOfferIdKey])
 
   useEffect(() => {
     if (activeTab !== 'transactions' || txLoaded || !walletAddress) return
@@ -154,18 +164,12 @@ export default function SellerDashboard() {
   }
 
   async function handleAccept(ids: string[]) {
-    if (!primaryWallet || !isSolanaWallet(primaryWallet) || ids.length === 0) return
+    if (!primaryWallet || ids.length === 0) return
     if (acceptingRef.current) return
     acceptingRef.current = true
     setAccepting(true)
     try {
-      const signer = await primaryWallet.getSigner()
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import('@solana/wallet-adapter-react').AnchorWallet
-      await acceptCounter(connection, anchorWallet, ids)
+      await acceptCounterOffers(primaryWallet, connection, ids)
       // The accept tx is confirmed on chain; settlement (and the realtime
       // status flip to `confirmed`) follows within seconds via the backend.
       // Remove the rows optimistically so the Accept button doesn't reappear
@@ -173,6 +177,9 @@ export default function SellerDashboard() {
       setAllCounterOffers((prev) => prev.filter((co) => !ids.includes(co.id)))
     } catch (err) {
       console.error('Accept failed', err)
+      setAcceptError(
+        err instanceof Error ? err.message : 'Could not accept these offers.',
+      )
     } finally {
       acceptingRef.current = false
       setAccepting(false)
@@ -253,6 +260,12 @@ export default function SellerDashboard() {
           )}
         </section>
       </main>
+
+      <AlertModal
+        message={acceptError}
+        onClose={() => setAcceptError(null)}
+        title="Can't accept"
+      />
     </div>
   )
 }

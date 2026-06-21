@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
 import { useDynamicContext, getAuthToken } from "@dynamic-labs/sdk-react-core";
 import { isSolanaWallet } from "@dynamic-labs/solana-core";
+import { isSuiWallet } from "@dynamic-labs/sui-core";
 import { getOffer } from "../supabase/offers/offers";
-import { submitCounterOffer } from "../supabase/offers/counterOffers";
-import { cancelCounterOffer } from "../supabase/offers/cancelCounterOffer";
 import {
   getCounterOfferByBuyer,
   watchCounterOfferStatuses,
@@ -14,14 +12,22 @@ import {
 } from "../supabase/offers/getCounterOffers";
 import { registerBuyer } from "../supabase/buyers/buyers";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { CounterOffer } from "../types/counterOffer";
-import { buy } from "../solana/instructions/buy";
+import {
+  buyOffer,
+  counterOffer,
+  cancelCounterOfferAction,
+} from "../dispatcher/actions";
 import type { Offer } from "../types/offer";
 import { config } from "../config/env";
+import InfoIcon from "../assets/icons/InfoIcon";
+import HomeIcon from "../assets/icons/HomeIcon";
 import s from "../styles/pay.module.css";
 
 const RETURNABLE_FEE_LAMPORTS = config.arcPay.returnableFeeLamports;
 const TX_COST_LAMPORTS = config.arcPay.txCostLamports;
+const SUI_TX_COST_MIST = config.arcPay.suiTxCostMist;
 
 function formatSol(lamports: number): string {
   return (lamports / 1_000_000_000).toLocaleString("en-US", {
@@ -36,17 +42,33 @@ export default function Pay() {
   const [counterOfferOpen, setCounterOfferOpen] = useState(false);
   const [counterPrice, setCounterPrice] = useState("");
   const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [counterError, setCounterError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [activeCounterOffer, setActiveCounterOffer] =
     useState<CounterOffer | null>(null);
   const [counterOfferLoading, setCounterOfferLoading] = useState(false);
 
   const { connection } = useConnection();
+  const navigate = useNavigate();
   const { primaryWallet, setShowAuthFlow, user } = useDynamicContext();
-  const connected = !!primaryWallet && isSolanaWallet(primaryWallet);
+  // The buyer must be connected on the offer's chain: a Sui offer needs a Sui
+  // wallet, a Solana offer a Solana wallet. (Defaults to Solana until the offer
+  // loads.)
+  const connected =
+    !!primaryWallet &&
+    (offer?.chain === "sui"
+      ? isSuiWallet(primaryWallet)
+      : isSolanaWallet(primaryWallet));
   const exchangingRef = useRef(false);
+
+  useEscapeKey(counterOfferOpen, () => {
+    setCounterOfferOpen(false);
+    setCounterError(null);
+  });
 
   useEffect(() => {
     if (!offerId) return;
@@ -79,6 +101,7 @@ export default function Pay() {
     return watchCounterOfferStatuses([activeCounterOffer.id], (_id, status) => {
       if (
         status === "confirmed" ||
+        status === "auto_confirmed" ||
         status === "buyer_canceled" ||
         status === "seller_canceled"
       )
@@ -123,17 +146,27 @@ export default function Pay() {
   }, [submitted, activeCounterOffer, offerId, primaryWallet]);
 
   async function handleBuy() {
-    if (!connected || !primaryWallet || !offerId || buying) return;
+    if (!connected || !primaryWallet || !offerId || buying || !offer) return;
     setBuying(true);
-    const signer = await primaryWallet.getSigner();
-    const anchorWallet = {
-      publicKey: new PublicKey(primaryWallet.address),
-      signTransaction: signer.signTransaction.bind(signer),
-      signAllTransactions: signer.signAllTransactions.bind(signer),
-    } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
+    setBuyError(null);
     try {
-      await buy(connection, anchorWallet, offerId);
-      await registerBuyer(primaryWallet.address);
+      await buyOffer(primaryWallet, connection, offer);
+      // Bookkeeping only — must not fail the purchase the buyer already made
+      // on-chain, so it runs detached from the buy result.
+      registerBuyer(primaryWallet.address).catch((err) =>
+        console.error("Failed to register buyer", err),
+      );
+    } catch (err) {
+      console.error("Failed to buy offer", err);
+      const message = err instanceof Error ? err.message : String(err);
+      const cur = offer.chain === "sui" ? "SUI" : "SOL";
+      if (/InsufficientCoinBalance|insufficient/i.test(message)) {
+        setBuyError(`Not enough ${cur} in your wallet to complete the purchase.`);
+      } else if (/reject|denied|cancell?ed/i.test(message)) {
+        setBuyError("Purchase canceled.");
+      } else {
+        setBuyError("Purchase failed. Please try again.");
+      }
     } finally {
       setBuying(false);
     }
@@ -146,20 +179,27 @@ export default function Pay() {
     if (!lamports || lamports <= 0) return;
     if (lamports >= offer.price_lamports) return;
     setSubmitting(true);
+    setCounterError(null);
     try {
-      const signer = await primaryWallet.getSigner();
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await submitCounterOffer(connection, anchorWallet, offerId, lamports);
-      await registerBuyer(primaryWallet.address);
+      await counterOffer(primaryWallet, connection, offer, lamports);
+      // Bookkeeping only — the offer is already on-chain, so a registration
+      // failure must not flip the flow into the error path.
+      registerBuyer(primaryWallet.address).catch((err) =>
+        console.error("Failed to register buyer", err),
+      );
       setSubmitted(true);
       setCounterOfferOpen(false);
       setCounterPrice("");
     } catch (err) {
       console.error("Failed to submit counter offer", err);
+      const message = err instanceof Error ? err.message : String(err);
+      if (/InsufficientCoinBalance|insufficient/i.test(message)) {
+        setCounterError(
+          `Not enough ${currency} in your wallet to cover the offer plus network fees.`,
+        );
+      } else {
+        setCounterError("Could not submit your offer. Please try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -169,21 +209,17 @@ export default function Pay() {
     if (!activeCounterOffer || !connected || !primaryWallet || canceling)
       return;
     setCanceling(true);
+    setCancelError(null);
     try {
-      const signer = await primaryWallet.getSigner();
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await cancelCounterOffer(
+      await cancelCounterOfferAction(
+        primaryWallet,
         connection,
-        anchorWallet,
-        activeCounterOffer.ephemeral_id,
+        activeCounterOffer,
       );
       setActiveCounterOffer(null);
     } catch (err) {
       console.error("Failed to cancel offer", err);
+      setCancelError("Could not cancel your offer. Please try again.");
     } finally {
       setCanceling(false);
     }
@@ -215,7 +251,10 @@ export default function Pay() {
     );
   }
 
-  const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
+  // Both chains use 9 decimals (lamports / MIST); only the token label differs.
+  const isSui = offer.chain === "sui";
+  const currency = isSui ? "SUI" : "SOL";
+  const priceAmount = (offer.price_lamports / 1_000_000_000).toFixed(4);
   const isAvailable = offer.status === "active";
 
   const offeredLamports = Math.max(
@@ -225,20 +264,29 @@ export default function Pay() {
   const feesAppliedLamports = Math.floor(
     (offeredLamports * offer.fee_bps) / 10000,
   );
-  const totalChargedLamports =
-    offeredLamports + RETURNABLE_FEE_LAMPORTS + TX_COST_LAMPORTS;
+  const totalChargedLamports = isSui
+    ? offeredLamports + SUI_TX_COST_MIST
+    : offeredLamports + RETURNABLE_FEE_LAMPORTS + TX_COST_LAMPORTS;
 
   return (
     <>
       <div className={s.page}>
         <div className={s.card}>
+          <button
+            type="button"
+            className={s.homeButton}
+            onClick={() => navigate("/buyer")}
+            aria-label="Go to dashboard"
+          >
+            <HomeIcon size={18} />
+          </button>
           <div className={s.logoWrap}>
             <img src="/favicon.svg" alt="ArcPay" className={s.logo} />
           </div>
 
           <div className={s.info}>
             <h1 className={s.name}>{offer.name}</h1>
-            <p className={s.price}>{priceSOL} SOL</p>
+            <p className={s.price}>{priceAmount} {currency}</p>
             {offer.description && (
               <p className={s.description}>{offer.description}</p>
             )}
@@ -265,13 +313,16 @@ export default function Pay() {
           ) : (
             <div className={s.actions}>
               {connected ? (
-                <button
-                  className={s.buyButton}
-                  onClick={handleBuy}
-                  disabled={buying}
-                >
-                  {buying ? "Buying…" : "BUY"}
-                </button>
+                <>
+                  <button
+                    className={s.buyButton}
+                    onClick={handleBuy}
+                    disabled={buying}
+                  >
+                    {buying ? "Buying…" : "BUY"}
+                  </button>
+                  {buyError && <p className={s.errorMessage}>{buyError}</p>}
+                </>
               ) : (
                 <button
                   className={s.connectButton}
@@ -292,7 +343,7 @@ export default function Pay() {
                         activeCounterOffer.fee_amount) /
                       1_000_000_000
                     ).toFixed(4)}{" "}
-                    SOL
+                    {currency}
                   </span>
                   <div className={s.activeOfferActions}>
                     <button
@@ -303,6 +354,9 @@ export default function Pay() {
                       {canceling ? "Canceling..." : "Cancel"}
                     </button>
                   </div>
+                  {cancelError && (
+                    <p className={s.errorMessage}>{cancelError}</p>
+                  )}
                 </div>
               )}
 
@@ -333,7 +387,10 @@ export default function Pay() {
       {counterOfferOpen && (
         <div
           className={s.modalOverlay}
-          onClick={() => setCounterOfferOpen(false)}
+          onClick={() => {
+            setCounterOfferOpen(false);
+            setCounterError(null);
+          }}
         >
           <div className={s.modal} onClick={(e) => e.stopPropagation()}>
             <h2 className={s.modalTitle}>Create offer</h2>
@@ -343,11 +400,8 @@ export default function Pay() {
               future marketing discount campaign or reviewed manually by the
               merchant. You'll be notified before any payment is taken.
             </p>
-            <button className={s.modalLearnMore} onClick={() => {}}>
-              Learn more about offers
-            </button>
             <div className={s.modalField}>
-              <label className={s.modalLabel}>Offered price (SOL)</label>
+              <label className={s.modalLabel}>Offered price ({currency})</label>
               <input
                 className={s.modalInput}
                 type="number"
@@ -355,55 +409,54 @@ export default function Pay() {
                 min="0"
                 placeholder="0.00"
                 value={counterPrice}
-                onChange={(e) => setCounterPrice(e.target.value)}
+                onChange={(e) => {
+                  setCounterPrice(e.target.value);
+                  setCounterError(null);
+                }}
               />
             </div>
             <div className={s.feeBreakdown}>
               <div className={s.feeRow}>
                 <span className={s.feeLabel}>Fees applied</span>
                 <span className={s.feeValue}>
-                  {formatSol(feesAppliedLamports)} SOL
+                  {formatSol(feesAppliedLamports)} {currency}
                 </span>
               </div>
-              <div className={s.feeRow}>
-                <span className={s.feeLabel}>
-                  Returnable fee
-                  <span className={s.feeTooltipWrap} tabIndex={0}>
-                    <svg
-                      className={s.feeInfoIcon}
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      aria-hidden="true"
-                    >
-                      <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
-                      <path
-                        d="M8 7v3.5"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                      />
-                      <circle cx="8" cy="5.25" r="0.75" fill="currentColor" />
-                    </svg>
-                    <span className={s.feeTooltip} role="tooltip">
-                      This fee will be returned when the offer is settled, no
-                      matter the outcome
+              {!isSui && (
+                <div className={s.feeRow}>
+                  <span className={s.feeLabel}>
+                    Returnable fee
+                    <span className={s.feeTooltipWrap} tabIndex={0}>
+                      <InfoIcon className={s.feeInfoIcon} />
+                      <span className={s.feeTooltip} role="tooltip">
+                        This fee will be returned when the offer is settled, no
+                        matter the outcome
+                      </span>
                     </span>
                   </span>
-                </span>
-                <span className={s.returnableValue}>
-                  ± {formatSol(RETURNABLE_FEE_LAMPORTS)} SOL
-                </span>
-              </div>
+                  <span className={s.returnableValue}>
+                    ± {formatSol(RETURNABLE_FEE_LAMPORTS)} {currency}
+                  </span>
+                </div>
+              )}
               <div className={s.feeRow}>
                 <span className={s.feeLabel}>Total amount charged</span>
                 <span className={s.feeValue}>
-                  ± {formatSol(totalChargedLamports)} SOL
+                  {isSui ? "≈" : "±"} {formatSol(totalChargedLamports)}{" "}
+                  {currency}
                 </span>
               </div>
             </div>
+            {counterError && (
+              <p className={s.errorMessage}>{counterError}</p>
+            )}
             <div className={s.modalActions}>
               <button
                 className={s.modalCancelButton}
-                onClick={() => setCounterOfferOpen(false)}
+                onClick={() => {
+                  setCounterOfferOpen(false);
+                  setCounterError(null);
+                }}
               >
                 Cancel
               </button>
@@ -411,7 +464,7 @@ export default function Pay() {
                 className={s.modalSubmitButton}
                 disabled={
                   !counterPrice ||
-                  parseFloat(counterPrice) <= 0 ||
+                  Math.round(parseFloat(counterPrice) * 1_000_000_000) <= 0 ||
                   (!!offer &&
                     Math.round(parseFloat(counterPrice) * 1_000_000_000) >=
                       offer.price_lamports) ||

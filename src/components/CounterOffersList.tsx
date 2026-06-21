@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CounterOffer } from '../types/counterOffer'
+import { formatDate, formatTimeWithZone, shortWallet } from '../utils/format'
 import s from '../styles/dashboard.module.css'
 
 interface CounterOffersListProps {
@@ -11,9 +12,9 @@ interface CounterOffersListProps {
   onHide?: (ids: string[]) => void
   // When set, the list switches to BUYER mode: no green selection summary and no
   // accept/hide/checkbox — each row instead gets a Cancel button (the buyer
-  // withdrawing their own counter offer). Keyed by the counter offer's
-  // ephemeral_id + id, matching the on-chain buyerCancelOffer call.
-  onCancel?: (ephemeralId: string, id: string) => void
+  // withdrawing their own counter offer). Receives the whole counter offer so
+  // the dispatcher can route the cancel to the right chain.
+  onCancel?: (counterOffer: CounterOffer) => void
   cancelingId?: string | null
   // When set, each row shows the name of the offer it belongs to. Used on the
   // seller dashboard, where counter offers from every listing are pooled, so the
@@ -24,28 +25,8 @@ interface CounterOffersListProps {
   offerNameFor?: (offerId: string) => string
 }
 
-function formatDate(iso: string) {
-  const d = new Date(iso)
-  return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}.${d.getFullYear()}`
-}
-
-function formatTime(iso: string) {
-  const d = new Date(iso)
-  const time = d.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  })
-  // Show the viewer's UTC offset so the timestamp is unambiguous (e.g. GMT+2).
-  const offsetMin = -d.getTimezoneOffset()
-  const sign = offsetMin >= 0 ? '+' : '-'
-  const h = Math.floor(Math.abs(offsetMin) / 60)
-  const m = Math.abs(offsetMin) % 60
-  return `${time} GMT${sign}${h}${m ? `:${String(m).padStart(2, '0')}` : ''}`
-}
-
-function shortWallet(address: string) {
-  return `${address.slice(0, 4)}...${address.slice(-4)}`
+function currencyOf(co: CounterOffer) {
+  return co.chain === 'sui' ? 'SUI' : 'SOL'
 }
 
 function isExpiringSoon(expiryIso: string) {
@@ -75,6 +56,22 @@ export default function CounterOffersList({
   const buyerMode = onCancel != null
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
+  // Drop ids whose rows have left the list (accepted / hidden / canceled) so the
+  // selection set doesn't accumulate stale entries.
+  const coIdKey = counterOffers.map((co) => co.id).join(',')
+  useEffect(() => {
+    const present = new Set(coIdKey ? coIdKey.split(',') : [])
+    setSelectedIds((prev) => {
+      let changed = false
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (present.has(id)) next.add(id)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [coIdKey])
+
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -97,6 +94,9 @@ export default function CounterOffersList({
   )
   const totalQty = displayed.reduce((sum, co) => sum + co.quantity, 0)
   const avgPrice = totalQty > 0 ? totalAmount / totalQty : 0
+  // A seller's offers are all on their active chain, so the pooled rows share one
+  // currency; fall back to SOL only when the list is empty.
+  const summaryCurrency = counterOffers[0] ? currencyOf(counterOffers[0]) : 'SOL'
 
   return (
     <>
@@ -112,13 +112,13 @@ export default function CounterOffersList({
           <div className={s.selectionSummaryItem}>
             <span className={s.selectionSummaryLabel}>Avg. Price</span>
             <span className={s.selectionSummaryValue}>
-              {(avgPrice / 1_000_000_000).toFixed(4)} SOL
+              {(avgPrice / 1_000_000_000).toFixed(4)} {summaryCurrency}
             </span>
           </div>
           <div className={s.selectionSummaryItem}>
             <span className={s.selectionSummaryLabel}>Total to receive</span>
             <span className={`${s.selectionSummaryValue} ${s.selectionSummaryTotal}`}>
-              {(totalAmount / 1_000_000_000).toFixed(4)} SOL
+              {(totalAmount / 1_000_000_000).toFixed(4)} {summaryCurrency}
             </span>
           </div>
         </div>
@@ -180,7 +180,7 @@ export default function CounterOffersList({
                 </div>
                 <div className={s.coListCol}>
                   <span className={s.coListLabel}>{formatDate(co.created_at)}</span>
-                  <span className={s.coListValue}>{formatTime(co.created_at)}</span>
+                  <span className={s.coListValue}>{formatTimeWithZone(co.created_at)}</span>
                 </div>
                 <div className={s.coListCol}>
                   <span className={s.coListLabel}>Expire on</span>
@@ -188,9 +188,9 @@ export default function CounterOffersList({
                 </div>
                 <div className={s.coListCol}>
                   <span className={s.coListLabel}>Profit</span>
-                  <span className={s.coListValue}>{profitSol} SOL</span>
+                  <span className={s.coListValue}>{profitSol} {currencyOf(co)}</span>
                 </div>
-                <span className={s.coListValueBold}>{totalSol} SOL</span>
+                <span className={s.coListValueBold}>{totalSol} {currencyOf(co)}</span>
                 <div className={s.coListControls}>
                   {confirmed ? (
                     <span className={s.counterOfferStatusConfirmed}>confirmed</span>
@@ -208,7 +208,7 @@ export default function CounterOffersList({
                       <button
                         className={s.hideOfferBtn}
                         disabled={cancelingId === co.id}
-                        onClick={() => onCancel?.(co.ephemeral_id, co.id)}
+                        onClick={() => onCancel?.(co)}
                       >
                         {cancelingId === co.id ? 'Canceling…' : 'Cancel'}
                       </button>

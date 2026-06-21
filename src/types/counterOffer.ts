@@ -10,8 +10,11 @@ export interface CounterOffer {
   status:
     | "active"
     | "confirmed"
+    | "auto_confirmed"
     | "buyer_canceled"
     | "seller_canceled";
   created_at: string;
   expiry_at: string;
+  chain: "sui" | "solana";
+  sui_object_id: string | null;
 }

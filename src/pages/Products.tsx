@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
 import { getOffersByWallet, watchOfferStatuses } from '../supabase/offers/offers'
-import { getCounterOffersBySeller } from '../supabase/offers/getCounterOffers'
+import {
+  getCounterOffersBySeller,
+  watchNewCounterOffers,
+} from '../supabase/offers/getCounterOffers'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import AppHeader from '../components/AppHeader'
@@ -29,11 +32,26 @@ export default function Products() {
   }, [ownOfferIdKey])
 
   useEffect(() => {
-    if (offers.length === 0) return
-    return watchOfferStatuses(offers.map((o) => o.id), (offerId, update) => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    return watchOfferStatuses(ids, (offerId, update) => {
       setOffers((prev) => prev.map((o) => (o.id === offerId ? { ...o, ...update } : o)))
     })
-  }, [offers])
+  }, [ownOfferIdKey])
+
+  // Keep each card's "N Offers" badge live as new counter offers land.
+  useEffect(() => {
+    const ids = ownOfferIdKey ? ownOfferIdKey.split(',') : []
+    if (ids.length === 0) return
+    const unsubs = ids.map((id) =>
+      watchNewCounterOffers(id, (co) => {
+        setCounterOffers((prev) =>
+          prev.some((c) => c.id === co.id) ? prev : [co, ...prev],
+        )
+      }),
+    )
+    return () => unsubs.forEach((u) => u())
+  }, [ownOfferIdKey])
 
   return (
     <div className={s.page}>

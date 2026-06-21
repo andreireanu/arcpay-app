@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
-import { isSolanaWallet } from '@dynamic-labs/solana-core'
 import { useConnection } from '@solana/wallet-adapter-react'
-import { PublicKey } from '@solana/web3.js'
 import {
   getItemsBought,
   getBuyerActiveCounterOffers,
@@ -12,9 +10,10 @@ import { getOffersByIds } from '../supabase/offers/offers'
 import { watchCounterOfferStatuses } from '../supabase/offers/getCounterOffers'
 import {
   getTransactionsByBuyer,
+  getCanceledOffersByBuyer,
   watchBuyerTransactions,
 } from '../supabase/transactions/transactions'
-import { cancelOffer } from '../solana/instructions/cancelOffer'
+import { cancelCounterOfferAction } from '../dispatcher/actions'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import type { Transaction } from '../types/transaction'
@@ -36,11 +35,17 @@ export default function BuyerDashboard() {
   // offer_id). Set from the async fetch below; merged with item names via memo.
   const [coOfferNames, setCoOfferNames] = useState<Record<string, string>>({})
 
-  const [activeTab, setActiveTab] = useState<'active' | 'transactions'>('active')
+  const [activeTab, setActiveTab] = useState<'active' | 'transactions' | 'past'>('active')
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [txTotal, setTxTotal] = useState(0)
   const [txLoaded, setTxLoaded] = useState(false)
+  // Bumped to force a Transactions re-fetch when a counter offer settles (those
+  // don't arrive via the qr_transactions live subscription).
+  const [txReload, setTxReload] = useState(0)
+  const [pastOffers, setPastOffers] = useState<Transaction[]>([])
+  const [pastLoaded, setPastLoaded] = useState(false)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
   // When set, both tabs are filtered to a single bought item (clicked above).
   const [focusedOfferId, setFocusedOfferId] = useState<string | null>(null)
   const cancelingRef = useRef(false)
@@ -86,6 +91,18 @@ export default function BuyerDashboard() {
   const offerNamesRef = useRef(offerNames)
   offerNamesRef.current = offerNames
 
+  // A filter change is user-driven, so show the loading state rather than the
+  // previous item's rows. A txReload bump is a background refresh and keeps the
+  // current rows visible (no flag reset here).
+  useEffect(() => {
+    setTxLoaded(false)
+  }, [focusedOfferId])
+
+  // Don't carry a stale cancel error across tab navigations.
+  useEffect(() => {
+    setCancelError(null)
+  }, [activeTab])
+
   // Reloads whenever the focused item changes so the Transactions tab shows that
   // item's buys (not just whatever was in the latest unfiltered page).
   useEffect(() => {
@@ -100,7 +117,7 @@ export default function BuyerDashboard() {
       })
       .catch(console.error)
     return () => { cancelled = true }
-  }, [walletAddress, focusedOfferId])
+  }, [walletAddress, focusedOfferId, txReload])
 
   // Live: a new buy by this wallet lands in qr_transactions.
   useEffect(() => {
@@ -118,6 +135,14 @@ export default function BuyerDashboard() {
     })
   }, [walletAddress])
 
+  // Canceled offers (by either party). Loaded lazily when the tab opens.
+  useEffect(() => {
+    if (activeTab !== 'past' || pastLoaded || !walletAddress) return
+    getCanceledOffersByBuyer(walletAddress)
+      .then((rows) => { setPastOffers(rows); setPastLoaded(true) })
+      .catch(console.error)
+  }, [activeTab, pastLoaded, walletAddress])
+
   // Live: one of the buyer's counter offers gets confirmed (becomes a purchase)
   // or canceled — drop it from Active and refresh the purchase-derived views.
   const coIdKey = counterOffers.map((co) => co.id).join(',')
@@ -126,29 +151,27 @@ export default function BuyerDashboard() {
     return watchCounterOfferStatuses(coIdKey.split(','), (id, status) => {
       if (status === 'active') return
       setCounterOffers((prev) => prev.filter((co) => co.id !== id))
-      if (status === 'confirmed') {
+      if (status === 'confirmed' || status === 'auto_confirmed') {
         if (walletAddress) getItemsBought(walletAddress).then(setItems).catch(console.error)
-        setTxLoaded(false)
+        setTxReload((n) => n + 1)
+      } else {
+        // buyer_canceled / seller_canceled → refetch Canceled offers next open.
+        setPastLoaded(false)
       }
     })
   }, [coIdKey, walletAddress])
 
-  async function handleCancel(ephemeralId: string, id: string) {
-    if (!primaryWallet || !isSolanaWallet(primaryWallet) || cancelingRef.current)
-      return
+  async function handleCancel(counterOffer: CounterOffer) {
+    if (!primaryWallet || cancelingRef.current) return
     cancelingRef.current = true
-    setCancelingId(id)
+    setCancelingId(counterOffer.id)
+    setCancelError(null)
     try {
-      const signer = await primaryWallet.getSigner()
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import('@solana/wallet-adapter-react').AnchorWallet
-      await cancelOffer(connection, anchorWallet, ephemeralId)
-      setCounterOffers((prev) => prev.filter((co) => co.id !== id))
+      await cancelCounterOfferAction(primaryWallet, connection, counterOffer)
+      setCounterOffers((prev) => prev.filter((co) => co.id !== counterOffer.id))
     } catch (err) {
       console.error('Failed to cancel counter offer', err)
+      setCancelError('Could not cancel that offer. Please try again.')
     } finally {
       cancelingRef.current = false
       setCancelingId(null)
@@ -164,6 +187,9 @@ export default function BuyerDashboard() {
   const shownCounterOffers = focusedOfferId
     ? counterOffers.filter((co) => co.offer_id === focusedOfferId)
     : counterOffers
+  const shownPastOffers = focusedOfferId
+    ? pastOffers.filter((t) => t.offer_id === focusedOfferId)
+    : pastOffers
   const focusedName = focusedOfferId ? offerNames[focusedOfferId] ?? '' : ''
 
   return (
@@ -201,6 +227,12 @@ export default function BuyerDashboard() {
               >
                 Transactions
               </button>
+              <button
+                className={`${s.tabBtn} ${activeTab === 'past' ? s.tabBtnActive : ''}`}
+                onClick={() => setActiveTab('past')}
+              >
+                Canceled offers
+              </button>
             </div>
             {focusedOfferId && (
               <div className={s.filterChip}>
@@ -222,12 +254,15 @@ export default function BuyerDashboard() {
             (shownCounterOffers.length === 0 ? (
               <p className={s.offersEmpty}>No active offers.</p>
             ) : (
-              <CounterOffersList
-                counterOffers={shownCounterOffers}
-                onCancel={handleCancel}
-                cancelingId={cancelingId}
-                offerNameFor={(offerId) => offerNames[offerId] ?? ''}
-              />
+              <>
+                {cancelError && <p className={s.errorMessage}>{cancelError}</p>}
+                <CounterOffersList
+                  counterOffers={shownCounterOffers}
+                  onCancel={handleCancel}
+                  cancelingId={cancelingId}
+                  offerNameFor={(offerId) => offerNames[offerId] ?? ''}
+                />
+              </>
             ))}
 
           {activeTab === 'transactions' && (
@@ -235,6 +270,7 @@ export default function BuyerDashboard() {
               <TransactionsList
                 transactions={transactions.slice(0, 5)}
                 loading={!txLoaded}
+                walletLabel="Your wallet"
               />
               {txLoaded && txTotal > 5 && (
                 <div className={s.gridFooter}>
@@ -247,6 +283,14 @@ export default function BuyerDashboard() {
                 </div>
               )}
             </>
+          )}
+
+          {activeTab === 'past' && (
+            shownPastOffers.length === 0 && pastLoaded ? (
+              <p className={s.offersEmpty}>No canceled offers.</p>
+            ) : (
+              <TransactionsList transactions={shownPastOffers} loading={!pastLoaded} walletLabel="Your wallet" />
+            )
           )}
         </section>
       </main>

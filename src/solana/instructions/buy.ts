@@ -9,7 +9,7 @@ import type { Connection } from "@solana/web3.js";
 import type { AnchorWallet } from "@solana/wallet-adapter-react";
 import { BN } from "@coral-xyz/anchor";
 import { getProgram, PROGRAM_ID } from "../program";
-import { getBuyAuth } from "../../supabase/sol/buyAuthorize";
+import { getBuyAuth } from "../../supabase/authorize/buyAuthorize";
 
 function uuidToBytes(uuid: string): Uint8Array {
   const hex = uuid.replace(/-/g, "");

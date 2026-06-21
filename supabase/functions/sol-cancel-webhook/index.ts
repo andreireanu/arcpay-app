@@ -64,6 +64,8 @@ Deno.serve(async (req) => {
 
   for (const tx of transactions) {
     const logs: string[] = tx.meta?.logMessages ?? tx.logs ?? [];
+    const txSignature: string =
+      tx.signature ?? tx.transaction?.signatures?.[0] ?? "";
 
     for (const log of logs) {
       if (!log.startsWith("Program data: ")) continue;
@@ -83,7 +85,12 @@ Deno.serve(async (req) => {
 
         const { data: canceledRows, error } = await supabase
           .from("qr_counteroffers")
-          .update({ status: "buyer_canceled", rent_returned: true })
+          .update({
+            status: "buyer_canceled",
+            returned: true,
+            settle_tx_signature: txSignature,
+            confirmed_at: new Date().toISOString(),
+          })
           .eq("ephemeral_id", ephemeralUuid)
           .select("id");
 
@@ -202,7 +209,7 @@ Deno.serve(async (req) => {
           fetch,
         });
         const keypairBytes = new Uint8Array(
-          JSON.parse(Deno.env.get("BACKEND_KEYPAIR")!),
+          JSON.parse(Deno.env.get("SOL_BACKEND_KEYPAIR")!),
         );
         const backendKeypair = Keypair.fromSecretKey(keypairBytes);
         const programId = new PublicKey(Deno.env.get("PROGRAM_ID")!);

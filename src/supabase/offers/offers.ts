@@ -1,5 +1,6 @@
 import { supabase } from '../client'
 import type { Offer } from '../../types/offer'
+import type { AppChain } from '../auth/auth'
 
 export async function insertOffer(
   sellerWallet: string,
@@ -9,10 +10,11 @@ export async function insertOffer(
   feeBps: number,
   quantity: number,
   unlimited: boolean,
+  chain: AppChain,
 ): Promise<Offer> {
   const { data: offer, error } = await supabase
     .from('qr_offers')
-    .insert({ name, description, price_lamports: priceLamports, seller_wallet: sellerWallet, fee_bps: feeBps, quantity, unlimited })
+    .insert({ name, description, price_lamports: priceLamports, seller_wallet: sellerWallet, fee_bps: feeBps, quantity, unlimited, chain })
     .select()
     .single()
   if (error) throw error
@@ -107,28 +109,4 @@ export function watchOfferStatuses(
   )
 
   return () => channels.forEach((c) => c.unsubscribe())
-}
-
-export function watchOfferStatus(
-  offerId: string,
-  onStatus: (status: string) => void,
-): () => void {
-  const channel = supabase
-    .channel(`offer-status-${offerId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'qr_offers',
-        filter: `id=eq.${offerId}`,
-      },
-      (payload) => {
-        const status = (payload.new as { status?: string }).status
-        if (status) onStatus(status)
-      },
-    )
-    .subscribe()
-
-  return () => channel.unsubscribe()
 }

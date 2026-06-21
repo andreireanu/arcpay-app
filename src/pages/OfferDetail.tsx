@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import QRCode from "qrcode";
 import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
-import { isSolanaWallet } from "@dynamic-labs/solana-core";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
 import {
   getOffer,
   pauseOffer,
@@ -19,65 +16,33 @@ import {
   watchCounterOfferStatuses,
   watchNewCounterOffers,
 } from "../supabase/offers/getCounterOffers";
-import { acceptCounter } from "../solana/instructions/acceptCounter";
-import { sellerCancelOffer } from "../solana/instructions/sellerCancelOffer";
+import {
+  getTransactionsBySeller,
+  watchNewTransactions,
+  watchSettledCounterOffers,
+} from "../supabase/transactions/transactions";
+import {
+  acceptCounterOffers,
+  cancelOfferAsSeller,
+} from "../dispatcher/actions";
+import { downloadQrSvg } from "../utils/qr";
+import { statusClass } from "../utils/offerStatus";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { Offer } from "../types/offer";
 import type { CounterOffer } from "../types/counterOffer";
+import type { Transaction } from "../types/transaction";
 import CounterOffersList from "../components/CounterOffersList";
+import TransactionsList from "../components/TransactionsList";
+import AutoAcceptButton from "../components/AutoAcceptButton";
+import AlertModal from "../components/AlertModal";
 import SolIcon from "../assets/icons/SolIcon";
+import SuiIcon from "../assets/icons/SuiIcon";
 import DownloadIcon from "../assets/icons/DownloadIcon";
+import PauseIcon from "../assets/icons/PauseIcon";
+import PlayIcon from "../assets/icons/PlayIcon";
+import CloseIcon from "../assets/icons/CloseIcon";
+import EyeIcon from "../assets/icons/EyeIcon";
 import s from "../styles/dashboard.module.css";
-
-function PauseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <rect x="6" y="4" width="4" height="16" rx="1" />
-      <rect x="14" y="4" width="4" height="16" rx="1" />
-    </svg>
-  );
-}
-
-function PlayIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M5 3l14 9-14 9V3z" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-    >
-      <path d="M18 6L6 18M6 6l12 12" />
-    </svg>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
 
 export default function OfferDetail() {
   const { offerId } = useParams<{ offerId: string }>();
@@ -89,12 +54,24 @@ export default function OfferDetail() {
   const [toggling, setToggling] = useState(false);
   const [counterOffers, setCounterOffers] = useState<CounterOffer[]>([]);
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<"counteroffers" | "transactions">(
+    "counteroffers",
+  );
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [txLoaded, setTxLoaded] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelCountdown, setCancelCountdown] = useState(10);
   const [canceling, setCanceling] = useState(false);
   const acceptingRef = useRef(false);
   const cancelWasActiveRef = useRef(false);
+  // Latest offer name for the realtime callbacks, so they can key on offerId
+  // alone and not re-subscribe (dropping events) when the name resolves.
+  const offerNameRef = useRef<string | undefined>(undefined);
+  offerNameRef.current = offer?.name;
+
+  useEscapeKey(cancelModalOpen && !canceling, handleCancelDismiss);
 
   useEffect(() => {
     if (!offerId) return;
@@ -121,7 +98,12 @@ export default function OfferDetail() {
     const ids = counterOfferIdKey ? counterOfferIdKey.split(",") : [];
     if (ids.length === 0) return;
     return watchCounterOfferStatuses(ids, (id, status) => {
-      if (status === "buyer_canceled" || status === "seller_canceled") {
+      if (
+        status === "confirmed" ||
+        status === "auto_confirmed" ||
+        status === "buyer_canceled" ||
+        status === "seller_canceled"
+      ) {
         setCounterOffers((prev) => prev.filter((co) => co.id !== id));
       } else {
         setCounterOffers((prev) =>
@@ -145,20 +127,68 @@ export default function OfferDetail() {
     });
   }, [offerId]);
 
+  // Lazy-load this offer's transactions when the tab is first opened.
+  useEffect(() => {
+    if (activeTab !== "transactions" || txLoaded || !primaryWallet?.address || !offerId)
+      return;
+    getTransactionsBySeller(primaryWallet.address, 0, 50, offerId)
+      .then(({ transactions }) => {
+        setTransactions(transactions);
+        setTxLoaded(true);
+      })
+      .catch(console.error);
+  }, [activeTab, txLoaded, primaryWallet?.address, offerId]);
+
+  // Live-append new direct buys and counter offers as they settle.
+  useEffect(() => {
+    if (!offerId) return;
+    return watchNewTransactions(offerId, (row) => {
+      setTransactions((prev) =>
+        prev.some((t) => t.id === row.id)
+          ? prev
+          : [{ ...row, offer_name: offerNameRef.current ?? "", source: "buy" as const }, ...prev],
+      );
+    });
+  }, [offerId]);
+
+  useEffect(() => {
+    if (!offerId) return;
+    return watchSettledCounterOffers(offerId, (row) => {
+      setTransactions((prev) =>
+        prev.some((t) => t.id === row.id)
+          ? prev
+          : [
+              { ...row, offer_name: offerNameRef.current ?? "" },
+              ...prev,
+            ],
+      );
+    });
+  }, [offerId]);
+
   async function handlePause() {
     if (!offer) return;
     setToggling(true);
-    await pauseOffer(offer.id);
-    setOffer((prev) => (prev ? { ...prev, status: "paused" } : prev));
-    setToggling(false);
+    try {
+      await pauseOffer(offer.id);
+      setOffer((prev) => (prev ? { ...prev, status: "paused" } : prev));
+    } catch (err) {
+      console.error("Failed to pause offer", err);
+    } finally {
+      setToggling(false);
+    }
   }
 
   async function handleResume() {
     if (!offer) return;
     setToggling(true);
-    await resumeOffer(offer.id);
-    setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
-    setToggling(false);
+    try {
+      await resumeOffer(offer.id);
+      setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
+    } catch (err) {
+      console.error("Failed to resume offer", err);
+    } finally {
+      setToggling(false);
+    }
   }
 
   useEffect(() => {
@@ -216,82 +246,48 @@ export default function OfferDetail() {
       }
 
       // Active counter offers exist — go on-chain so the webhook refunds them.
-      if (!primaryWallet || !isSolanaWallet(primaryWallet)) return;
-      const signer = await primaryWallet.getSigner();
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await sellerCancelOffer(connection, anchorWallet, offer.id);
+      if (!primaryWallet) return;
+      await cancelOfferAsSeller(primaryWallet, connection, offer);
       setCancelModalOpen(false);
     } catch (err) {
       console.error("Failed to cancel offer", err);
-      try {
-        await resumeOffer(offer.id);
-        setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
-      } catch {
-        /* best-effort resume; original cancel error already logged */
+      // Only resume if we paused it for this cancel — never flip an
+      // already-paused offer back to active.
+      if (cancelWasActiveRef.current) {
+        try {
+          await resumeOffer(offer.id);
+          setOffer((prev) => (prev ? { ...prev, status: "active" } : prev));
+        } catch {
+          /* best-effort resume; original cancel error already logged */
+        }
       }
     } finally {
       setCanceling(false);
     }
   }
 
-  async function handleDownloadQr() {
+  function handleDownloadQr() {
     if (!offer) return;
-    const url = `${window.location.origin}/pay/${offer.id}`;
-    let svg: string = await QRCode.toString(url, {
-      type: "svg",
-      errorCorrectionLevel: "H",
-    });
-    try {
-      const resp = await fetch("/favicon.svg");
-      if (resp.ok) {
-        const b64 = btoa(await resp.text());
-        const logoData = `data:image/svg+xml;base64,${b64}`;
-        const match = svg.match(
-          /viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/,
-        );
-        if (match) {
-          const w = parseFloat(match[1]);
-          const h = parseFloat(match[2]);
-          const logoSize = Math.round(w * 0.22);
-          const x = Math.round((w - logoSize) / 2);
-          const y = Math.round((h - logoSize) / 2);
-          svg = svg.replace(
-            "</svg>",
-            `<image href="${logoData}" x="${x}" y="${y}" width="${logoSize}" height="${logoSize}"/></svg>`,
-          );
-        }
-      }
-    } catch {
-      /* download without logo if fetch fails */
-    }
-    const blob = new Blob([svg], { type: "image/svg+xml" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${offer.name}-qr.svg`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadQrSvg(offer.name, offer.id).catch((err) =>
+      console.error("Failed to download QR", err),
+    );
   }
 
   async function handleAccept(ids: string[]) {
-    if (!primaryWallet || !isSolanaWallet(primaryWallet) || ids.length === 0)
-      return;
+    if (!primaryWallet || ids.length === 0) return;
     if (acceptingRef.current) return;
     acceptingRef.current = true;
     setAccepting(true);
     try {
-      const signer = await primaryWallet.getSigner();
-      const anchorWallet = {
-        publicKey: new PublicKey(primaryWallet.address),
-        signTransaction: signer.signTransaction.bind(signer),
-        signAllTransactions: signer.signAllTransactions.bind(signer),
-      } as unknown as import("@solana/wallet-adapter-react").AnchorWallet;
-      await acceptCounter(connection, anchorWallet, ids);
+      await acceptCounterOffers(primaryWallet, connection, ids);
+      // Optimistically drop the accepted rows so they can't be re-accepted
+      // during the settlement lag (the webhook removes them for good).
+      setCounterOffers((prev) => prev.filter((co) => !ids.includes(co.id)));
     } catch (err) {
       console.error("Accept counter offer failed", err);
+      setAcceptError(
+        err instanceof Error ? err.message : "Could not accept these offers.",
+      );
     } finally {
       acceptingRef.current = false;
       setAccepting(false);
@@ -319,14 +315,6 @@ export default function OfferDetail() {
     } catch (err) {
       console.error("Failed to show hidden counter offers", err);
     }
-  }
-
-  function statusClass(status: Offer["status"]) {
-    if (status === "active") return s.statusActive;
-    if (status === "paused") return s.statusPaused;
-    if (status === "canceled") return s.statusCanceled;
-    if (status === "sold") return s.statusSold;
-    return "";
   }
 
   if (loading) {
@@ -361,7 +349,8 @@ export default function OfferDetail() {
     );
   }
 
-  const priceSOL = (offer.price_lamports / 1_000_000_000).toFixed(4);
+  const isSui = offer.chain === "sui";
+  const price = (offer.price_lamports / 1_000_000_000).toFixed(4);
   const canAct = offer.status === "active" || offer.status === "paused";
 
   return (
@@ -389,16 +378,19 @@ export default function OfferDetail() {
             <div className={s.offerDetailContent}>
               <div className={s.offerDetailNameRow}>
                 <h1 className={s.offerDetailName}>{offer.name}</h1>
-                <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
-                  {offer.status}
-                </span>
+                <div className={s.offerDetailStatusGroup}>
+                  <AutoAcceptButton offer={offer} />
+                  <span className={`${s.statusBadge} ${statusClass(offer.status)}`}>
+                    {offer.status}
+                  </span>
+                </div>
               </div>
               {offer.description && (
                 <p className={s.offerDetailDescription}>{offer.description}</p>
               )}
               <div className={s.offerDetailPrice}>
-                <SolIcon size={30} />
-                <span>{priceSOL} SOL</span>
+                {isSui ? <SuiIcon size={30} /> : <SolIcon size={30} />}
+                <span>{price} {isSui ? "SUI" : "SOL"}</span>
               </div>
 
               <div className={s.offerDetailActions}>
@@ -453,31 +445,57 @@ export default function OfferDetail() {
           </div>
         </div>
 
-        {(counterOffers.length > 0 || hiddenIds.length > 0) && (
-          <div className={s.offersSection}>
-            <section className={s.counterOffersSection}>
-              <div className={s.counterOffersHeader}>
-                <h2 className={s.counterOffersTitle}>Counter offers</h2>
-                {hiddenIds.length > 0 && (
-                  <button
-                    className={s.unhideAllBtn}
-                    onClick={handleShowHidden}
-                  >
-                    Show hidden ({hiddenIds.length})
-                  </button>
+        <section className={s.bottomPanel}>
+          <div className={s.tabsRow}>
+            <div className={s.tabGroup}>
+              <button
+                className={`${s.tabBtn} ${activeTab === "counteroffers" ? s.tabBtnActive : ""}`}
+                onClick={() => setActiveTab("counteroffers")}
+              >
+                {counterOffers.length > 0 && (
+                  <span className={s.tabBadge}>{counterOffers.length}</span>
                 )}
-              </div>
+                Active offers
+              </button>
+              <button
+                className={`${s.tabBtn} ${activeTab === "transactions" ? s.tabBtnActive : ""}`}
+                onClick={() => setActiveTab("transactions")}
+              >
+                Transactions
+              </button>
+            </div>
+            {activeTab === "counteroffers" && hiddenIds.length > 0 && (
+              <button className={s.unhideAllBtn} onClick={handleShowHidden}>
+                Show hidden ({hiddenIds.length})
+              </button>
+            )}
+          </div>
+
+          {activeTab === "counteroffers" &&
+            (counterOffers.length === 0 ? (
+              <p className={s.offersEmpty}>No active counter offers.</p>
+            ) : (
               <CounterOffersList
                 counterOffers={counterOffers}
                 accepting={accepting}
                 onAccept={handleAccept}
                 onHide={handleHide}
+                offerNameFor={() => offer.name}
               />
-            </section>
-          </div>
-        )}
+            ))}
+
+          {activeTab === "transactions" && (
+            <TransactionsList transactions={transactions} loading={!txLoaded} />
+          )}
+        </section>
       </main>
     </div>
+
+    <AlertModal
+      message={acceptError}
+      onClose={() => setAcceptError(null)}
+      title="Can't accept"
+    />
 
     {cancelModalOpen && (
         <div className={s.modalOverlay} onClick={handleCancelDismiss}>
