@@ -11,7 +11,6 @@ import {
   watchBuyerCounterOfferInsert,
 } from "../supabase/offers/getCounterOffers";
 import { registerBuyer } from "../supabase/buyers/buyers";
-import { connectLiveSuiWallet } from "../sui/liveWallet";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { CounterOffer } from "../types/counterOffer";
@@ -66,19 +65,30 @@ export default function Pay() {
       : isSolanaWallet(primaryWallet));
   const exchangingRef = useRef(false);
 
-  // When opening this page, connect the live wallet directly via the
-  // wallet-standard registry (this shows the wallet's connection request — the
-  // "sign on open"). Dynamic's own connector is a dead placeholder after a
-  // client-side navigation, but the extension wallet is still registered with
-  // the page, so we talk to it directly — no page reload. No-op for embedded
-  // wallets (handled by Dynamic at buy time).
+  // Dynamic only re-runs its wallet reconnect on a full page load. Arriving here
+  // via a client-side navigation leaves a wallet-standard wallet (e.g. Slush)
+  // with no active connection, so the lazy connect() inside signTransaction
+  // throws "Wallet does not support standard:connect" at BUY time. Re-establish
+  // the connection on entry — what a refresh does — so the first action signs
+  // straight away. isConnected() runs a silent reconnect (never throws); if the
+  // origin still isn't connected we trigger the connector's connect() to prompt.
   useEffect(() => {
     if (!primaryWallet) return;
-    const w = primaryWallet as { key?: string; connector?: { name?: string } };
-    const walletName = w.connector?.name ?? w.key;
-    connectLiveSuiWallet(primaryWallet.address, walletName).catch((err) =>
-      console.error("live wallet connect on page entry failed", err),
-    );
+    let cancelled = false;
+    (async () => {
+      try {
+        if (await primaryWallet.isConnected()) return;
+        const connector = primaryWallet.connector as {
+          connect?: () => Promise<void>;
+        };
+        if (!cancelled) await connector.connect?.();
+      } catch (err) {
+        if (!cancelled) console.error("wallet reconnect on page entry failed", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [primaryWallet]);
 
   useEscapeKey(counterOfferOpen, () => {

@@ -2,7 +2,6 @@ import { Transaction } from "@mysten/sui/transactions";
 import type { SuiWallet } from "@dynamic-labs/sui-core";
 import { CONFIG_ID, CLOCK_ID, target } from "../package";
 import { suiClient } from "../client";
-import { signSuiTransaction } from "../liveWallet";
 import { getBuyAuth } from "../../supabase/authorize/buyAuthorize";
 
 function uuidToBytes(uuid: string): number[] {
@@ -37,8 +36,7 @@ export async function buy(wallet: SuiWallet, offerId: string): Promise<string> {
   });
 
   const builtBytes = await tx.build({ client: suiClient });
-  const { bytes, signature } = await signSuiTransaction(
-    wallet,
+  const { bytes, signature } = await wallet.signTransaction(
     Transaction.from(builtBytes),
   );
 
