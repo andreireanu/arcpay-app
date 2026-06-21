@@ -1278,14 +1278,23 @@
 }
 
 .coListName {
-    /* Only the name column flexes — it absorbs extra width so the fixed columns
-       to its right line up identically on every row regardless of name length. */
-    flex: 1 1 auto;
-    min-width: 170px;
+    /* Fixed width with an ellipsis so a long offer name truncates instead of
+       expanding the row — which overlapped the next column in the narrow seller
+       card and pushed the status badge off the right edge in the wide buyer view. */
+    flex: 0 0 240px;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 10px;
     overflow: hidden;
+}
+
+.coListName .coListValue {
+    /* min-width:0 lets this flex item shrink below its text so the ellipsis
+       actually renders instead of the name overflowing. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .coListOfferIcon {
