@@ -12,6 +12,7 @@ import {
 } from "../supabase/offers/getCounterOffers";
 import { registerBuyer } from "../supabase/buyers/buyers";
 import { exchangeToken } from "../supabase/auth/exchangeToken";
+import { getCurrentRole, getStoredRole } from "../supabase/auth/auth";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { CounterOffer } from "../types/counterOffer";
 import {
@@ -133,7 +134,10 @@ export default function Pay() {
     }
     exchangingRef.current = true;
     setCounterOfferLoading(true);
-    exchangeToken(token, primaryWallet.address, "buyer")
+    // Keep an existing role (a seller buying stays a seller); default a fresh
+    // login on this page to buyer.
+    const role = getStoredRole() ?? "buyer";
+    exchangeToken(token, primaryWallet.address, role)
       .then(() => getCounterOfferByBuyer(offerId!, primaryWallet.address))
       .then(setActiveCounterOffer)
       .catch(console.error)
@@ -322,7 +326,9 @@ export default function Pay() {
           <button
             type="button"
             className={s.homeButton}
-            onClick={() => navigate("/buyer")}
+            onClick={() =>
+              navigate(getCurrentRole() === "seller" ? "/seller" : "/buyer")
+            }
             aria-label="Go to dashboard"
           >
             <HomeIcon size={18} />

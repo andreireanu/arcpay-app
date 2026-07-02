@@ -12,6 +12,14 @@ export function getCurrentRole(): 'seller' | 'buyer' {
   return role === 'buyer' ? 'buyer' : 'seller'
 }
 
+// The stored role, or null if none is set yet (i.e. the user hasn't entered the
+// app from either dashboard). Lets the buy page keep an existing role instead of
+// forcing 'buyer', while still defaulting a fresh login to 'buyer'.
+export function getStoredRole(): 'seller' | 'buyer' | null {
+  const role = localStorage.getItem('arcpay_role')
+  return role === 'buyer' || role === 'seller' ? role : null
+}
+
 // The chain the user chose at login. A session is scoped to one chain (model A):
 // you sign in on the chain you pick and the app transacts on it. Persisted so it
 // survives reloads and is available before primaryWallet resolves.
