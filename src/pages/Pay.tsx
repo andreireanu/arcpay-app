@@ -21,6 +21,7 @@ import {
 } from "../dispatcher/actions";
 import type { Offer } from "../types/offer";
 import { config } from "../config/env";
+import { useTrackPageView } from "../analytics/gtag";
 import InfoIcon from "../assets/icons/InfoIcon";
 import HomeIcon from "../assets/icons/HomeIcon";
 import s from "../styles/pay.module.css";
@@ -37,6 +38,9 @@ function formatSol(lamports: number): string {
 
 export default function Pay() {
   const { offerId } = useParams<{ offerId: string }>();
+
+  useTrackPageView("buy");
+
   const [offer, setOffer] = useState<Offer | null>(null);
   const [loading, setLoading] = useState(true);
   const [counterOfferOpen, setCounterOfferOpen] = useState(false);

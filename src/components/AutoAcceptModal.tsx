@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { AutoAccept } from "../types/autoAccept";
 import { useEscapeKey } from "../hooks/useEscapeKey";
@@ -6,7 +6,6 @@ import CloseIcon from "../assets/icons/CloseIcon";
 import s from "../styles/dashboard.module.css";
 
 interface Props {
-  open: boolean;
   onClose: () => void;
   onSave: (quantity: number, avgPriceLamports: number) => void;
   onTurnOff: () => void;
@@ -18,7 +17,6 @@ interface Props {
 }
 
 export default function AutoAcceptModal({
-  open,
   onClose,
   onSave,
   onTurnOff,
@@ -26,6 +24,8 @@ export default function AutoAcceptModal({
   chain,
   existing,
 }: Props) {
+  // Mounted only while open, so the initializers seed the inputs from the
+  // current rule on each open.
   const [quantity, setQuantity] = useState(
     existing ? String(existing.quantity) : "",
   );
@@ -33,17 +33,7 @@ export default function AutoAcceptModal({
     existing ? String(existing.avg_price / 1_000_000_000) : "",
   );
 
-  // The modal stays mounted (returns null when closed), so re-seed the inputs
-  // from the current rule each time it opens.
-  useEffect(() => {
-    if (!open) return;
-    setQuantity(existing ? String(existing.quantity) : "");
-    setPrice(existing ? String(existing.avg_price / 1_000_000_000) : "");
-  }, [open, existing]);
-
-  useEscapeKey(open && !saving, onClose);
-
-  if (!open) return null;
+  useEscapeKey(!saving, onClose);
 
   // Both SOL and SUI use 9 decimals, so the price→base-unit conversion is the
   // same; only the label differs.

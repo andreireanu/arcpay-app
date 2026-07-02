@@ -15,6 +15,7 @@ import { acceptCounterOffers } from '../dispatcher/actions'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import type { Transaction } from '../types/transaction'
+import { useTrackPageView } from '../analytics/gtag'
 import AppHeader from '../components/AppHeader'
 import ProductsGrid from '../components/ProductsGrid'
 import TransactionsList from '../components/TransactionsList'
@@ -27,6 +28,8 @@ export default function SellerDashboard() {
   const { connection } = useConnection()
   const navigate = useNavigate()
   const walletAddress = primaryWallet?.address
+
+  useTrackPageView('seller')
 
   const [offers, setOffers] = useState<Offer[]>([])
   // Latest offers for realtime callbacks that resolve an offer name, so the

@@ -17,6 +17,7 @@ import { cancelCounterOfferAction } from '../dispatcher/actions'
 import type { Offer } from '../types/offer'
 import type { CounterOffer } from '../types/counterOffer'
 import type { Transaction } from '../types/transaction'
+import { useTrackPageView } from '../analytics/gtag'
 import AppHeader from '../components/AppHeader'
 import ItemsBoughtGrid from '../components/ItemsBoughtGrid'
 import TransactionsList from '../components/TransactionsList'
@@ -28,6 +29,8 @@ export default function BuyerDashboard() {
   const { connection } = useConnection()
   const navigate = useNavigate()
   const walletAddress = primaryWallet?.address
+
+  useTrackPageView('buyer')
 
   const [items, setItems] = useState<Offer[]>([])
   const [counterOffers, setCounterOffers] = useState<CounterOffer[]>([])

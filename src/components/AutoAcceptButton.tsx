@@ -79,15 +79,16 @@ export default function AutoAcceptButton({ offer, rule, compact }: Props) {
       >
         {armed ? "Auto accept: on" : "Auto accept"}
       </button>
-      <AutoAcceptModal
-        open={open}
-        onClose={() => setOpen(false)}
-        onSave={handleSave}
-        onTurnOff={handleTurnOff}
-        saving={saving}
-        chain={offer.chain}
-        existing={autoAccept}
-      />
+      {open && (
+        <AutoAcceptModal
+          onClose={() => setOpen(false)}
+          onSave={handleSave}
+          onTurnOff={handleTurnOff}
+          saving={saving}
+          chain={offer.chain}
+          existing={autoAccept}
+        />
+      )}
     </>
   );
 }
