@@ -10,6 +10,7 @@ export const config = {
   },
   sui: {
     network: import.meta.env.VITE_SUI_NETWORK as string,
+    rpcUrl: import.meta.env.VITE_SUI_RPC_URL as string | undefined,
     packageId: import.meta.env.VITE_SUI_PACKAGE_ID as string,
     configId: import.meta.env.VITE_SUI_CONFIG_ID as string,
   },
